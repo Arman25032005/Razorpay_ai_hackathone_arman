@@ -1,19 +1,14 @@
 """
 Synthetic data generator for the recovery-probability model.
 
-Honesty constraints this generator follows (spec section 12 and section
-54's "do not cheat"):
-- Labels are NOT drawn independently of features. Recovery probability is
-  computed from a documented causal formula below, then a binary outcome
-  is sampled from that probability (so the relationship is learnable but
-  noisy, not a leak, and not a perfect correlation).
-- No target leakage: every feature is something we would genuinely know
-  at decision time (before the recovery attempt), never something only
-  known after the outcome.
-- Scale is intentionally modest (thousands, not hundreds of thousands of
-  rows) — this is a real, honestly-evaluated logistic regression baseline
-  for a hackathon-scale MVP, not a claim of a production-scale ML
-  pipeline. See docs/ML.md for the explicit scope statement.
+Honesty constraints (spec section 12, section 54 "do not cheat"):
+- Labels aren't independent of features — recovery probability comes from
+  the causal formula below, then a binary outcome is sampled from it
+  (learnable but noisy, not a leak or a perfect correlation).
+- No target leakage: every feature is knowable before the recovery
+  attempt, never derived from the outcome.
+- Scale is intentionally modest — an honestly-evaluated baseline for a
+  hackathon MVP, not a production-scale claim (see docs/ML.md).
 
 Run directly: `python -m ml.data_generator --rows 8000 --seed 42`
 """
