@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RecoverAI — AI Revenue Recovery Agent</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">R</div>
+      <div>
+        <div class="brand-name">RecoverAI</div>
+        <div class="brand-sub">Revenue Recovery Agent</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <button class="nav-item active" data-view="dashboard">
+        <span class="nav-ico">◆</span> Executive Dashboard
+      </button>
+      <button class="nav-item" data-view="cases">
+        <span class="nav-ico">▤</span> Recovery Cases
+      </button>
+      <button class="nav-item" data-view="activity">
+        <span class="nav-ico">◉</span> Agent Activity
+      </button>
+      <button class="nav-item" data-view="escalations">
+        <span class="nav-ico">⚑</span> Human Review Queue
+      </button>
+      <button class="nav-item" data-view="analytics">
+        <span class="nav-ico">▦</span> Analytics
+      </button>
+      <button class="nav-item" data-view="policies">
+        <span class="nav-ico">⚙</span> Policies
+      </button>
+      <button class="nav-item" data-view="integrations">
+        <span class="nav-ico">⇄</span> Integrations
+      </button>
+    </nav>
+    <div class="sidebar-foot">
+      <button id="runSimBtn" class="btn-primary full">▶ Run Recovery Simulation</button>
+      <button id="replayBtn" class="btn-ghost full">↻ Replay Best Recovery</button>
+      <button id="resetSimBtn" class="btn-ghost full">Reset demo data</button>
+      <button id="themeToggleBtn" class="btn-ghost full">🌙 Dark mode</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div id="topbarTitle">Executive Dashboard</div>
+      <div class="topbar-right">
+        <select id="merchantSwitcher" class="merchant-switcher"></select>
+        <span class="badge-mode">DEMO MODE</span>
+      </div>
+    </header>
+    <div id="viewRoot" class="view-root">
+      <!-- views injected here -->
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
