@@ -41,14 +41,9 @@ def require_api_key(x_api_key: str | None = Header(default=None)):
 
 
 def verify_webhook_signature(raw_body: bytes, signature: str | None) -> None:
-    """Validates an HMAC-SHA256 signature over the raw request body against
-    PAYMENT_WEBHOOK_SECRET — the same scheme Razorpay uses (see
-    https://razorpay.com/docs/webhooks/validate-test/): the raw webhook
-    body is HMAC-SHA256'd with the webhook secret configured on the
-    Razorpay dashboard, sent as the `X-Razorpay-Signature` header, and
-    verified here with a constant-time comparison. No-op if the secret
-    isn't configured (demo mode) — set PAYMENT_WEBHOOK_SECRET to require
-    signed webhooks."""
+    """HMAC-SHA256 signature check against PAYMENT_WEBHOOK_SECRET — same
+    scheme Razorpay uses (https://razorpay.com/docs/webhooks/validate-test/).
+    No-op if the secret isn't set (demo mode)."""
     if WEBHOOK_SECRET is None:
         return
     if not signature:
