@@ -1,28 +1,19 @@
 """
 Payment State Machine.
 
-Formalizes payment status transitions as an explicit, validated state
-machine rather than leaving them as implicit string assignments scattered
-across the codebase. This is the single source of truth for "is this
-transition legal, and which status wins when events arrive out of order or
-twice."
+Explicit, validated state transitions instead of implicit string
+assignments scattered around the codebase — single source of truth for
+"is this transition legal, and which status wins on out-of-order or
+duplicate events." States follow Razorpay's real payment lifecycle (see
+docs/RAZORPAY_INTEGRATION.md and PaymentState below), not invented ones.
 
-States are based on Razorpay's actual documented payment lifecycle (see
-docs/RAZORPAY_INTEGRATION.md) — not invented. Razorpay's real payment
-entity statuses are: created -> authorized -> captured, with failed,
-refunded, and partially_refunded as additional terminal/near-terminal
-states. We map our internal "succeeded"/"failed"/"pending" vocabulary onto
-that, since the recovery agent only needs to know "did money move or not,"
-but the underlying transition legality follows Razorpay's real lifecycle.
-
-Critical responsibilities this module exists to satisfy (spec section 8 and
-section 35's "graceful failure" requirement):
-- Never let a stale/out-of-order webhook downgrade a payment that has
-  already reached a later, more-authoritative state.
+Critical responsibilities (spec section 8, and section 35's "graceful
+failure" requirement):
+- Never let a stale/out-of-order webhook downgrade a payment that already
+  reached a later, more-authoritative state.
 - Never let a duplicate event trigger a second transition.
-- Always require checking CURRENT state before executing a recovery
-  action — if a payment has already succeeded by the time an agent goes to
-  act on it, the action must be cancelled, not executed anyway.
+- Always check CURRENT state before executing a recovery action — if a
+  payment already succeeded by the time an agent acts, cancel, don't execute.
 """
 from dataclasses import dataclass
 from datetime import datetime
