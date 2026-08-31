@@ -238,11 +238,9 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
 
 @app.get("/api/models/current")
 def current_model():
-    """Spec section 45: reports the currently deployed model's version,
-    training date, and real evaluation metrics — read directly from the
-    metrics.json produced by `python -m ml.train`, never fabricated. If no
-    model has been trained yet, says so honestly instead of inventing
-    numbers."""
+    """Spec section 45: reports the deployed model's version, training date,
+    and real eval metrics — read straight from metrics.json (python -m
+    ml.train), never fabricated. Says so honestly if nothing's trained yet."""
     import json
     metrics_path = os.path.join("models", "recovery_model_v1", "metrics.json")
     if not os.path.exists(metrics_path):
