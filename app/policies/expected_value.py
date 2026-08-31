@@ -1,23 +1,17 @@
 """
 Cost-sensitive decision framework (spec section 15).
 
-The core formula, exactly as specified:
-
     Expected Value = P(recovery) x Recoverable Amount
                       - Action Cost
                       - Customer Annoyance Cost
                       - Risk Cost
 
-This is deliberately informational/advisory, not a gate — the policy
-engine (app/policies/engine.py) remains the single deterministic authority
-over what the agent is allowed to do. This module answers "is this action
-worth taking, in expected-value terms?" as an additional signal a human
-reviewer (or a future, more sophisticated strategy selector) can use
-alongside the policy engine's hard rules — it never bypasses them.
+Advisory only, not a gate — app/policies/engine.py stays the one hard
+authority on what the agent can do. This just answers "is this worth it
+in EV terms" as a signal alongside those rules, never a bypass.
 
-All cost estimates below are explicit, documented, editable constants —
-not learned, not hidden. This keeps the framework auditable: anyone
-reviewing a decision can see exactly which numbers went into it.
+Cost constants below are explicit and editable, not learned — keeps
+the numbers behind any decision inspectable.
 """
 from dataclasses import dataclass
 
