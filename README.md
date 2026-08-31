@@ -67,6 +67,8 @@ full RBAC, and CI/CD.
 ## Quickstart
 
 ```bash
+git clone https://github.com/<your-org>/<this-repo>.git
+cd <this-repo>
 ./run.sh
 ```
 
