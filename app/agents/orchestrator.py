@@ -76,13 +76,10 @@ def _log(db: Session, case: RecoveryCase, actor_type: str, action: str, descript
 
 
 def _apply_strategy_optimizer(db: Session, decision) -> str:
-    """Recovery Policy Optimizer hook (spec section 47): among the strategies
-    the diagnosis step judged eligible (decision.strategy_scores), prefer
-    whichever has the best real track record — but only once there's enough
-    history (>=5 attempts) to trust it, and only ever choosing among
-    strategies the diagnosis step already approved. This never lets
-    historical performance override the diagnosis into an unvetted
-    strategy; it only re-ranks within the AI's own candidate set."""
+    """Recovery Policy Optimizer hook (spec section 47): among strategies the
+    diagnosis step already approved, prefer whichever has the best real
+    track record — but only with >=5 attempts of history to trust it. Only
+    re-ranks within the approved set, never introduces an unvetted one."""
     candidates = [s["strategy"] for s in (decision.strategy_scores or [])
                   if s["strategy"] != "human_escalation"]
     if len(candidates) < 2:

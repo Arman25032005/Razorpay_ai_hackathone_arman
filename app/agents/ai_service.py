@@ -292,17 +292,13 @@ def _diagnose_via_llm(source_type: str, customer_ctx: dict, **kwargs) -> "Decisi
 # ---- prioritization and summarization (spec section 24: dedicated AI service functions) ----
 
 def prioritize_cases(cases: list) -> list:
-    """Ranks open cases by recovery priority. Deterministic scoring — the
-    factors themselves (amount, confidence, attempts so far, staleness) are
-    plain arithmetic; this mirrors the "hybrid" pattern used for strategy
-    scoring (app/policies/optimizer.py rank_recovery_strategies): compute
-    deterministic factors in code, and only ask the AI to weigh in when it
-    adds judgment beyond arithmetic. Returns cases sorted highest-priority
-    first, alongside a `priority_score`.
+    """Ranks open cases by recovery priority — plain arithmetic, same
+    "deterministic factors in code" pattern as the strategy optimizer
+    (app/policies/optimizer.py rank_recovery_strategies). Returns cases
+    sorted highest-priority first with a `priority_score`.
 
-    Priority favors: larger amounts, higher diagnosis confidence (more
-    likely to convert), fewer attempts already spent, and cases that have
-    been open longer (avoid starving old cases)."""
+    Favors larger amounts, higher diagnosis confidence, fewer attempts
+    spent, and cases open longer (so old ones don't starve)."""
     from app.models import utcnow
 
     scored = []
@@ -342,15 +338,10 @@ def summarize_case(case) -> str:
 # ---- Customer Recovery Health Score (creative addition) --------------------
 
 def customer_health_score(customer) -> dict:
-    """A 0-100 score summarizing how likely this customer is to self-resolve
-    payment issues, computed from real history — not a black box. Meant to
-    give a human reviewer instant context on a customer without reading
-    their full payment history: a high score means "this is probably a
-    blip, let automation handle it"; a low score means "this customer's
-    payment reliability is a genuine concern, weigh that in any manual
-    decision." Purely informational — it does not gate policy or actions,
-    only aids human judgment (bounded autonomy stays with the policy
-    engine, not with this score)."""
+    """0-100 score for how likely this customer is to self-resolve payment
+    issues, from real history — not a black box. Gives a reviewer instant
+    context without reading the full payment history. Informational only,
+    doesn't gate policy or actions."""
     payments = customer.payments
     total = len(payments)
     successful = len([p for p in payments if p.status == "succeeded"])
@@ -415,12 +406,9 @@ def predict_recovery_probability(customer_success_rate: float, customer_payment_
                                   amount: float, root_cause: str, strategy: str,
                                   attempt_count: int, days_since_last_payment: int) -> dict | None:
     """Returns {"probability": float, "explanation": [str, ...]} from the
-    trained logistic-regression baseline, or None if no trained model is
-    available. Explanation is derived from the model's actual learned
-    coefficients (coefficient * scaled feature value = that feature's
-    contribution to the prediction) — not a hand-written justification, so
-    it reflects what the model actually did, per spec section 47's
-    explainability requirement (concise factors, no raw internals)."""
+    trained logistic-regression baseline, or None if untrained. Explanation
+    comes from the model's real coefficients (coef * scaled value = that
+    feature's contribution) — not a hand-written justification."""
     _load_ml_model()
     if _ml_model is None:
         return None
