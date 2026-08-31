@@ -20,10 +20,8 @@ def gen_id(prefix: str) -> str:
 
 
 def utcnow() -> datetime:
-    """Naive UTC now, via the non-deprecated datetime.now(timezone.utc) API.
-    Stripped back to naive because our DateTime columns and existing
-    comparisons (e.g. `utcnow() - case.created_at`) are naive throughout —
-    mixing in an aware value would raise on subtraction."""
+    """Naive UTC now — everything else in this schema is naive too,
+    so an aware value here would blow up on subtraction."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
@@ -40,12 +38,9 @@ class CaseStatus(str, enum.Enum):
 
 
 class Merchant(Base):
-    """Multi-tenant root entity. Every Customer belongs to exactly one
-    Merchant; every downstream Payment/Invoice/RecoveryCase/AuditEvent is
-    reachable only through its Customer, so tenant isolation is enforced
-    by joining through Customer.merchant_id at the query layer (see
-    docs/ARCHITECTURE.md for the explicit rationale for this design vs.
-    duplicating merchant_id onto every table)."""
+    """Multi-tenant root. Everything downstream hangs off Customer, so
+    tenant isolation happens via Customer.merchant_id joins rather than
+    duplicating merchant_id on every table (see docs/ARCHITECTURE.md)."""
     __tablename__ = "merchants"
     id = Column(String, primary_key=True, default=lambda: gen_id("MERCH"))
     name = Column(String, nullable=False)
