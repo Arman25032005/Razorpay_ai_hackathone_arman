@@ -1,0 +1,24 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: recoverai
+      POSTGRES_USER: recoverai
+      POSTGRES_PASSWORD: recoverai
+    ports:
+      - "5432:5432"
+    volumes:
+      - recoverai_pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://recoverai:recoverai@db:5432/recoverai
+    ports:
+      - "8000:8000"
+
+volumes:
+  recoverai_pgdata:

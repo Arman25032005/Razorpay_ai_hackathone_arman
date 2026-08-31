@@ -1,0 +1,25 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Local demo database
+*.db
+*.db-wal
+*.db-shm
+
+# Environment / secrets — NEVER commit real credentials
+.env
+
+# Synthetic training data — regenerable via `python -m ml.data_generator`,
+# not needed in version control, and not required for the app to run
+# (the trained model artifacts below ARE committed, so the app works
+# immediately after clone without a training step).
+data/*.csv
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store
+*.swp
