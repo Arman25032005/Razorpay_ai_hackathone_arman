@@ -84,20 +84,13 @@ class MockPaymentProvider(PaymentProvider):
 
 class RazorpayPaymentProvider(PaymentProvider):
     """Real Razorpay integration (test or live mode, whichever API keys are
-    configured). Implemented directly against Razorpay's documented REST
-    API — https://api.razorpay.com/v1/ — with HTTP Basic Auth
-    (key_id:key_secret), no SDK dependency required.
+    configured) against the documented REST API — https://api.razorpay.com/v1/
+    — with HTTP Basic Auth (key_id:key_secret), no SDK needed.
 
-    Important, honest distinction from the mock provider: Razorpay has no
-    server-initiated "retry this payment" API — a failed payment can only
-    be retried by the customer themselves. So in live mode, `retry_payment`
-    does the realistic equivalent: it creates a fresh Payment Link for the
-    same amount and returns its status as "pending" (a human/customer
-    action, not an instant simulated result) rather than pretending to
-    force a charge through. `get_payment_status` can then be polled (e.g.
-    via a webhook or a follow-up check) to see if the customer completed
-    it. This keeps the "never claim recovery without a real payment-success
-    event" rule (see MockPaymentProvider docstring) true in live mode too.
+    Razorpay has no server-initiated retry API — only the customer can retry
+    a failed payment. So `retry_payment` issues a fresh Payment Link instead
+    and reports it "pending", never an instant success. `get_payment_status`
+    can then be polled (webhook or follow-up check) to see if they paid.
     """
 
     BASE_URL = "https://api.razorpay.com/v1"
@@ -128,9 +121,7 @@ class RazorpayPaymentProvider(PaymentProvider):
 
     def retry_payment(self, payment_id: str, amount: float, root_cause: str,
                        intervention: str | None = None) -> dict:
-        # No server-initiated retry API exists — issue a fresh Payment Link
-        # instead (the realistic live-mode equivalent) and report it as
-        # pending customer action, never as an instant success.
+        # see class docstring — no retry API, so issue a fresh link instead
         link_result = self.create_payment_link(amount, "INR")
         return {
             "provider": "razorpay",
