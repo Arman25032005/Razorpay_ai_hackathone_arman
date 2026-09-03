@@ -71,7 +71,7 @@ def _make_customer(db: Session, b2b: bool = False, merchant_id: str | None = Non
     c = Customer(
         name=name,
         merchant_id=merchant_id,
-        email=fake.email(),
+        email=fake.safe_email(),
         phone=fake.phone_number()[:15],
         company=fake.company() if b2b else None,
         customer_type="B2B" if b2b else "B2C",
@@ -146,7 +146,7 @@ def create_curated_scenarios(db: Session, merchant_id: str | None = None) -> lis
     scenario_cases = []
     for label, name, ctype, source_type, amount, kwargs, history in CURATED_SCENARIOS:
         customer = Customer(
-            name=name, merchant_id=merchant_id, email=fake.email(), company=name if ctype == "B2B" else None,
+            name=name, merchant_id=merchant_id, email=fake.safe_email(), company=name if ctype == "B2B" else None,
             customer_type=ctype, lifetime_value=round(amount * random.uniform(3, 15), 2),
             risk_profile="low" if history["n_fail"] == 0 else "medium",
         )
@@ -189,7 +189,7 @@ def create_graceful_cancellation_scenario(db: Session, merchant_id: str | None =
     cancel gracefully instead of falsely claiming a recovery."""
     label, name, ctype, source_type, amount, kwargs, history = SCENARIO_H
     customer = Customer(
-        name=name, merchant_id=merchant_id, email=fake.email(), customer_type=ctype,
+        name=name, merchant_id=merchant_id, email=fake.safe_email(), customer_type=ctype,
         lifetime_value=round(amount * random.uniform(3, 15), 2), risk_profile="low",
     )
     db.add(customer)
@@ -304,9 +304,11 @@ def generate_batch(db: Session, n_customers: int = 60, seed_events: bool = True)
 
 def run_agent_on_batch(db: Session, cases: list) -> dict:
     # Simulated customers have fake, randomly-generated contact details
-    # (see fake.email() above) — never route them through real Razorpay/
-    # SendGrid/Twilio even if those are configured for real cases. Swap in
-    # mocks for the duration of the batch, then restore whatever was live.
+    # (see fake.safe_email() above — guaranteed-undeliverable
+    # example.com/.org/.net addresses, never a real domain) — never route
+    # them through real Razorpay/SendGrid/Twilio even if those are
+    # configured for real cases. Swap in mocks for the duration of the
+    # batch, then restore whatever was live.
     real_payment_provider = orchestrator.payment_provider
     real_communication_provider = orchestrator.communication_provider
     orchestrator.payment_provider = MockPaymentProvider()
