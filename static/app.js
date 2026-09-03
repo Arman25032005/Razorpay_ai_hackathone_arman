@@ -461,16 +461,29 @@ async function openCaseDetail(id) {
     </div>
   `;
   $("#backBtn").addEventListener("click", () => render());
-  $("#analyzeBtn")?.addEventListener("click", async () => { await api(`/recovery-cases/${id}/analyze`, { method: "POST" }); openCaseDetail(id); });
-  $("#executeBtn")?.addEventListener("click", async () => { await api(`/recovery-cases/${id}/execute`, { method: "POST" }); openCaseDetail(id); });
-  $("#approveBtn")?.addEventListener("click", async () => { await api(`/recovery-cases/${id}/approve`, { method: "POST" }); openCaseDetail(id); });
-  $("#rejectBtn")?.addEventListener("click", async () => { await api(`/recovery-cases/${id}/reject`, { method: "POST" }); openCaseDetail(id); });
+  const caseAction = (btnId, path) => {
+    $(btnId)?.addEventListener("click", async () => {
+      try {
+        await api(`/recovery-cases/${id}${path}`, { method: "POST" });
+        openCaseDetail(id);
+      } catch (e) {
+        toast("Action failed: " + e.message);
+      }
+    });
+  };
+  caseAction("#analyzeBtn", "/analyze");
+  caseAction("#executeBtn", "/execute");
+  caseAction("#approveBtn", "/approve");
+  caseAction("#rejectBtn", "/reject");
   $("#sendLinkBtn")?.addEventListener("click", async () => {
     const btn = $("#sendLinkBtn");
     btn.disabled = true; btn.textContent = "Sending\u2026";
     try {
       const result = await api(`/recovery-cases/${id}/send-payment-link`, { method: "POST" });
-      toast(`Payment link sent via ${result.provider}: ${result.link || "generation failed"}`);
+      const failReason = result.error?.description || result.error?.reason || "generation failed";
+      toast(result.link
+        ? `Payment link sent via ${result.provider}: ${result.link}`
+        : `Payment link via ${result.provider}: ${failReason}`);
       openCaseDetail(id);
     } catch (e) {
       toast("Failed to send payment link: " + e.message);
