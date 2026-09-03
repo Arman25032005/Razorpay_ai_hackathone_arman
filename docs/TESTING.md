@@ -6,8 +6,9 @@
 ./venv/bin/python -m pytest tests/ -q
 ```
 
-**73 tests, all passing** on a fresh `pip install -r requirements.txt`,
-verified repeatedly throughout this build rather than run once and trusted.
+**90 tests, all passing** on a fresh `pip install -r requirements.txt`,
+verified repeatedly throughout this build rather than run once and
+trusted, and re-run on every push/PR by CI (`.github/workflows/ci.yml`).
 
 ## Coverage by category (extracted directly from `tests/test_core.py`'s
 section markers, not hand-summarized separately from the actual file)
@@ -32,6 +33,10 @@ section markers, not hand-summarized separately from the actual file)
 | ML pipeline tests | Learnable-not-trivial label distribution, causal-structure sanity checks (reliability and attempt-count direction), chronological temporal split, safe None-handling when no model trained, real model round-trip |
 | Multi-tenant isolation tests | Customer correctly scoped to merchant, cross-tenant case query isolation, nullable merchant_id backward compatibility |
 | Expected value framework tests | Act/do-not-act recommendation correctness, annoyance-cost scaling, confirmed advisory-only (never imported by the policy engine) |
+| Decline-code classification tests | Authoritative `error.reason` mapping takes precedence over the coarser `error.code`/description fallback; non-retryable buckets correctly excluded from retry strategies |
+| Outbound webhook tests | Signed delivery + logging, event-type filtering, delivery failures never raise into the recovery workflow |
+| Dashboard login gate tests | Session token issuance/verification/expiry/tampering, either credential (session or API key) accepted, login endpoint's own states |
+| Product-decision scenario tests | Named directly after `docs/PRODUCT_DECISIONS.md`'s categories and `docs/DESIGN_WALKTHROUGH.md`'s judge Q&A: transient failure retried, permanent failure never blindly retried, LLM network failure and malformed/out-of-vocabulary output both fall back to the rule engine safely, the deterministic policy layer still blocks an AI-recommended action on a large amount, and the structured `decision_recorded` audit event carries the documented explainability schema |
 
 ## What "meaningful coverage" meant in practice for this build
 
@@ -52,9 +57,12 @@ every getter/formatter in the codebase.
 - **No load/performance test suite** beyond the manual 1,000-customer
   simulation timing check documented in `docs/ARCHITECTURE.md` and the
   README.
-- **No CI** — see `docs/DEPLOYMENT.md`'s honest gap section. All 73 tests
-  have been run manually, repeatedly, but never on an automated
-  push/PR trigger.
+- **CI runs with no external credentials** (`.github/workflows/ci.yml`
+  has no `.env`), so every push/PR run exercises the deterministic
+  rule-engine and mock-provider paths only — it does not, and cannot,
+  verify the live Razorpay/LLM/SendGrid/Twilio code paths. Those are
+  exercised manually; see `docs/RAZORPAY_INTEGRATION.md` for what's
+  currently verified live vs. not.
 - **ML tests validate the pipeline's mechanics and causal-structure
   sanity, not the specific numeric metric values** (those are expected to
   vary slightly by random seed and are reported transparently via

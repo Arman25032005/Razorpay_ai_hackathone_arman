@@ -1144,3 +1144,172 @@ def test_auth_status_reflects_login_gate_state(monkeypatch):
     token = auth.create_session_token()
     status = auth_status(authorization=f"Bearer {token}")
     assert status["authenticated"] is True
+
+
+# ---------------------------------------------------------------- Product-decision scenario tests
+# These map directly to docs/PRODUCT_DECISIONS.md's failure categories and
+# docs/DESIGN_WALKTHROUGH.md's "questions a judge may ask" — named for the
+# business scenario they verify, not just the code path.
+
+def test_transient_failure_is_retried_when_policy_allows(monkeypatch):
+    """Category: transient failure. A gateway timeout is not the
+    customer's fault and nothing about it is expected to recur — the
+    system should retry, not escalate or ask the customer to do anything."""
+    monkeypatch.setattr(ai_service, "USE_LLM", False)
+    ctx = {"successful_payments": 4, "previous_failures": 0}
+    d = ai_service.diagnose("payment_failed", ctx, failure_reason="temporary_failure")
+    assert d.root_cause == "temporary_failure"
+    assert d.recommended_strategy == "immediate_payment_retry"
+    assert d.human_escalation_required is False
+
+
+def test_permanent_failure_never_gets_a_blind_retry(monkeypatch):
+    """Category: non-recoverable failure. An expired card cannot be fixed
+    by retrying the same card — RETRY_SUCCESS_PROBABILITY encodes this as
+    a hard 0.0, and the strategy layer must never route to a retry here."""
+    monkeypatch.setattr(ai_service, "USE_LLM", False)
+    ctx = {"successful_payments": 4, "previous_failures": 0}
+    d = ai_service.diagnose("payment_failed", ctx, failure_reason="card_expired")
+    assert d.root_cause == "expired_card"
+    assert d.recommended_strategy not in ("immediate_payment_retry", "delayed_retry")
+
+    from app.providers.payment import RETRY_SUCCESS_PROBABILITY
+    assert RETRY_SUCCESS_PROBABILITY["expired_card"] == 0.0
+
+
+def test_llm_network_failure_falls_back_to_rule_engine(monkeypatch):
+    """Scenario: LLM unavailable. A connection error mid-call must not
+    crash diagnosis or stall the case — it must fall through to the
+    deterministic rule engine, which is always available."""
+    monkeypatch.setattr(ai_service, "USE_LLM", True)
+    monkeypatch.setattr(ai_service, "LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("LLM_API_KEY", "sk-ant-test-key")
+
+    import urllib.request
+
+    def fake_urlopen(req, timeout=15):
+        raise ConnectionError("network unreachable")
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    ctx = {"successful_payments": 4, "previous_failures": 0}
+    d = ai_service.diagnose("payment_failed", ctx, failure_reason="temporary_failure")
+    # Falls back to the rule engine's real output for this input, not a
+    # generic error state — the caller can't even tell the LLM was tried.
+    assert d.root_cause == "temporary_failure"
+    assert d.recommended_strategy == "immediate_payment_retry"
+
+
+def test_llm_malformed_json_falls_back_to_rule_engine(monkeypatch):
+    """Scenario: LLM returns malformed output (not valid JSON). Must not
+    propagate a parse exception into the case workflow."""
+    monkeypatch.setattr(ai_service, "USE_LLM", True)
+    monkeypatch.setattr(ai_service, "LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("LLM_API_KEY", "sk-ant-test-key")
+
+    import urllib.request
+    import json as _json
+
+    class FakeResponse:
+        def __init__(self, body):
+            self._body = body
+        def read(self):
+            return self._body
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=15):
+        # Valid HTTP envelope, but the model's "content" text is not JSON.
+        envelope = _json.dumps({"content": [{"type": "text", "text": "not json at all {{{"}]}).encode()
+        return FakeResponse(envelope)
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    ctx = {"successful_payments": 4, "previous_failures": 0}
+    d = ai_service.diagnose("payment_failed", ctx, failure_reason="temporary_failure")
+    assert d.root_cause == "temporary_failure"  # rule-engine fallback, not a crash
+
+
+def test_llm_output_outside_allowed_vocabulary_is_rejected(monkeypatch):
+    """Scenario 9: invalid AI recommendation. If the model returns a
+    root_cause or strategy outside the fixed allow-list, that output must
+    be discarded entirely — never partially trusted — falling back to the
+    rule engine rather than executing on an unvalidated action."""
+    monkeypatch.setattr(ai_service, "USE_LLM", True)
+    monkeypatch.setattr(ai_service, "LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("LLM_API_KEY", "sk-ant-test-key")
+
+    import urllib.request
+    import json as _json
+
+    class FakeResponse:
+        def __init__(self, body):
+            self._body = body
+        def read(self):
+            return self._body
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=15):
+        bad_decision = _json.dumps({
+            "root_cause": "the_customer_is_definitely_lying",  # not in ALLOWED_ROOT_CAUSES
+            "root_cause_confidence": 0.99,
+            "customer_context_summary": "x",
+            "recommended_strategy": "refund_and_apologize_personally",  # not in ALLOWED_STRATEGIES
+            "reasoning_summary": "x",
+            "human_escalation_required": False,
+            "escalation_reason": None,
+        })
+        envelope = _json.dumps({"content": [{"type": "text", "text": bad_decision}]}).encode()
+        return FakeResponse(envelope)
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    ctx = {"successful_payments": 4, "previous_failures": 0}
+    d = ai_service.diagnose("payment_failed", ctx, failure_reason="temporary_failure")
+    assert d.root_cause == "temporary_failure"  # the real rule-engine answer
+    assert d.root_cause != "the_customer_is_definitely_lying"
+    assert d.recommended_strategy != "refund_and_apologize_personally"
+
+
+def test_policy_still_blocks_ai_recommended_action_on_large_amount(db, monkeypatch):
+    """Scenario 9 (deterministic layer variant): even when the diagnosis
+    layer recommends an immediate retry with high confidence, a
+    large-amount case must still require human approval — the policy
+    layer's authority does not depend on how confident the upstream
+    recommendation was."""
+    monkeypatch.setattr(ai_service, "USE_LLM", False)
+    c = make_customer(db)
+    case = create_case(db, c, "payment_failed", "PAY-large", DEFAULT_POLICY["large_amount_threshold"] + 1)
+    analyze_case(db, case, failure_reason="temporary_failure")
+    assert case.recommended_strategy == "immediate_payment_retry"  # AI said "go"
+
+    result = check_policy(case, "payment_retry", None, case.amount_at_risk)
+    assert not result.allowed  # policy said "no" anyway
+    assert result.requires_human_approval
+
+
+def test_decision_recorded_audit_event_has_explainable_schema(db, monkeypatch):
+    """Every policy-gated decision writes one structured, explainable
+    audit event — the schema documented in docs/PRODUCT_DECISIONS.md."""
+    monkeypatch.setattr(ai_service, "USE_LLM", False)
+    from app.providers import payment as payment_mod
+    monkeypatch.setattr(payment_mod, "RETRY_SUCCESS_PROBABILITY", {"temporary_failure": 0.0})
+    payment_mod.payment_provider = payment_mod.MockPaymentProvider()
+    monkeypatch.setattr("app.agents.orchestrator.payment_provider", payment_mod.payment_provider)
+
+    c = make_customer(db)
+    case = create_case(db, c, "payment_failed", "PAY-decision", 1000)
+    analyze_case(db, case, failure_reason="temporary_failure")
+    execute_next_action(db, case)
+
+    events = db.query(AuditEvent).filter(AuditEvent.case_id == case.id,
+                                          AuditEvent.action == "decision_recorded").all()
+    assert len(events) == 1
+    meta = events[0].event_metadata
+    for key in ("decision", "strategy", "root_cause", "expected_recovery_value",
+                "probability_used", "policy_check", "policy_reason", "retry_count", "max_retries"):
+        assert key in meta
+    assert meta["decision"] == "allow"
+    assert meta["policy_check"] == "passed"

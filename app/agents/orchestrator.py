@@ -254,6 +254,28 @@ def execute_next_action(db: Session, case: RecoveryCase) -> RecoveryCase:
     case.current_step = STEP_POLICY_CHECK
     policy = get_active_policy(db)
     policy_result = check_policy(case, action_type, channel, case.amount_at_risk, policy=policy)
+
+    # Structured decision snapshot — the single audit event a judge or an
+    # ops reviewer should be able to read to understand *why* the agent
+    # did what it did, without reading source code. Mirrors the schema in
+    # docs/PRODUCT_DECISIONS.md; probability falls back to diagnosis
+    # confidence when the ML model has no trained artifacts yet.
+    from app.policies.expected_value import compute_expected_value
+    probability = case.root_cause_confidence or 0.5
+    ev = compute_expected_value(probability, case.amount_at_risk, action_type,
+                                 strategy=strategy, prior_attempts=case.attempt_count)
+    _log(db, case, "SYSTEM", "decision_recorded",
+         f"Decision: {'allow' if policy_result.allowed else 'block'} {strategy} "
+         f"(expected value {ev.expected_value:+.2f}) — {policy_result.reason}",
+         {
+             "decision": "allow" if policy_result.allowed else "block",
+             "strategy": strategy, "root_cause": case.root_cause,
+             "expected_recovery_value": ev.expected_value,
+             "probability_used": probability,
+             "policy_check": "passed" if policy_result.allowed else "blocked",
+             "policy_reason": policy_result.reason,
+             "retry_count": case.attempt_count, "max_retries": policy["max_attempts"],
+         })
     _log(db, case, "SYSTEM", "policy_check",
          f"Policy check: {'PASSED' if policy_result.allowed else 'BLOCKED'} — {policy_result.reason}")
 

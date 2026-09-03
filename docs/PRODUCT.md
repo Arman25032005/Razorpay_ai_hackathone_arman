@@ -97,9 +97,13 @@ and impossible to miss.
 - **Redis / task queue.** Not needed yet at this scale; the simulation
   engine processes hundreds of cases synchronously in seconds. Roadmap
   item once webhook volume requires async processing.
-- **Full RBAC/JWT auth, CI/CD pipeline, OpenTelemetry/Prometheus.**
-  Lightweight API-key auth exists (`app/security.py`); the rest are
-  documented as next steps in `docs/SECURITY.md`, not implemented.
+- ~~**CI/CD pipeline.**~~ Done — `.github/workflows/ci.yml` runs the test
+  suite, a frontend syntax check, and an ML pipeline smoke test on every
+  push/PR; Render auto-deploys `main` on a passing push (CD).
+- **Full RBAC/JWT auth, OpenTelemetry/Prometheus.** Lightweight
+  API-key/dashboard-password auth exists (`app/security.py`,
+  `app/auth.py`); per-user RBAC and observability tooling are documented
+  as next steps in `docs/SECURITY.md`, not implemented.
 - ~~**Live Razorpay test-mode round-trip.**~~ Done — verified with real
   test-mode credentials: `RazorpayPaymentProvider.create_payment_link()`
   executed against `api.razorpay.com` and returned a genuine payment link
