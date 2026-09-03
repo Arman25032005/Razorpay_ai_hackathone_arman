@@ -684,44 +684,23 @@ async function renderIntegrations(root) {
   const razorpayOn = s.payment_provider.active === "razorpay";
   const emailOn = s.communication_provider.email === "sendgrid";
   const whatsappOn = s.communication_provider.whatsapp === "twilio";
+  const llmName = s.llm_diagnosis.enabled ? `LLM Diagnosis (${s.llm_diagnosis.provider})` : "LLM Diagnosis";
   const integrations = [
-    { name: "Razorpay (Payment Links + Webhooks)", on: razorpayOn,
-      detail: razorpayOn ? "Live — using real Razorpay API" : "Not connected — set RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET" },
-    { name: "Mock Payment Provider", on: !razorpayOn, detail: !razorpayOn ? "Active (demo mode)" : "Standing by" },
-    { name: "Webhook Signature Verification", on: s.webhook_signature_verification.enabled,
-      detail: s.webhook_signature_verification.enabled ? "HMAC-SHA256 required on all webhooks" : "Not enforced — set PAYMENT_WEBHOOK_SECRET" },
-    { name: "LLM Diagnosis (Claude)", on: s.llm_diagnosis.enabled, detail: s.llm_diagnosis.mode },
-    { name: "API Key Auth", on: s.api_auth.enabled, detail: s.api_auth.enabled ? "Required on mutating endpoints" : "Open (demo mode) — set API_KEY" },
-    { name: "Email (SendGrid)", on: emailOn,
-      detail: emailOn ? "Live — using real SendGrid API" : "Not connected — set SENDGRID_API_KEY / SENDGRID_FROM_EMAIL" },
-    { name: "WhatsApp (Twilio)", on: whatsappOn,
-      detail: whatsappOn ? "Live — using real Twilio API" : "Not connected — set TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM" },
-    { name: "Database", on: true, detail: s.database.type === "postgresql" ? "PostgreSQL (production)" : "SQLite (local demo)" },
+    { name: "Razorpay", on: razorpayOn, detail: razorpayOn ? "Live" : "Mock" },
+    { name: "Webhook Signatures", on: s.webhook_signature_verification.enabled, detail: s.webhook_signature_verification.enabled ? "Enforced" : "Not enforced" },
+    { name: llmName, on: s.llm_diagnosis.enabled, detail: s.llm_diagnosis.enabled ? "Live" : "Rule engine" },
+    { name: "API Auth", on: s.api_auth.enabled, detail: s.api_auth.enabled ? "Required" : "Open" },
+    { name: "Email", on: emailOn, detail: emailOn ? "SendGrid" : "Mock" },
+    { name: "WhatsApp", on: whatsappOn, detail: whatsappOn ? "Twilio" : "Mock" },
+    { name: "Database", on: true, detail: s.database.type === "postgresql" ? "PostgreSQL" : "SQLite" },
   ];
-  const savedKey = localStorage.getItem("recoverai_api_key") || "";
   root.innerHTML = `<div class="integration-grid">
     ${integrations.map(i => `
       <div class="card integration-card">
         <div style="font-weight:600; margin-bottom:8px;">${i.name}</div>
-        <div><span class="dot ${i.on ? "on" : "off"}"></span>${i.on ? "Connected" : "Not connected"}</div>
-        <div class="hint" style="margin-top:6px;">${escapeHtml(i.detail)}</div>
+        <div><span class="dot ${i.on ? "on" : "off"}"></span>${escapeHtml(i.detail)}</div>
       </div>`).join("")}
-  </div>
-  <div class="card" style="margin-top:16px; max-width:480px;">
-    <div style="font-weight:600; margin-bottom:8px;">Dashboard API Key</div>
-    <div class="hint" style="margin-bottom:8px;">If API_KEY is set on the server, paste the same value here so this dashboard's buttons (analyze, execute, approve, etc.) can authenticate. Stored only in this browser (localStorage).</div>
-    <div style="display:flex; gap:8px;">
-      <input id="dashboard-api-key" type="password" value="${escapeHtml(savedKey)}" placeholder="X-API-Key value" style="flex:1;" />
-      <button id="save-api-key-btn">Save</button>
-    </div>
-  </div>
-  <p class="hint" style="margin-top:16px;">This reflects live server configuration \u2014 not a hardcoded display. Demo mode runs entirely on the mock payment and communication providers with zero external credentials required; set the environment variables above to switch any of these to a real, live integration without touching the agent code.</p>`;
-  $("#save-api-key-btn", root).addEventListener("click", () => {
-    const val = $("#dashboard-api-key", root).value.trim();
-    if (val) localStorage.setItem("recoverai_api_key", val);
-    else localStorage.removeItem("recoverai_api_key");
-    toast(val ? "API key saved" : "API key cleared");
-  });
+  </div>`;
 
   await renderMerchantWebhooks(root);
 }
@@ -734,7 +713,7 @@ async function renderMerchantWebhooks(root) {
 
   if (!currentMerchantId) {
     wrap.innerHTML = `<div style="font-weight:600; margin-bottom:8px;">Outbound Webhooks</div>
-      <div class="hint">Select a specific merchant from the switcher above to manage webhook subscriptions — they let that merchant's own systems (CRM, finance, alerting) receive <code>case.opened</code> / <code>case.recovered</code> / <code>case.escalated</code> / <code>case.stopped</code> events, signed with HMAC-SHA256, the same scheme this app requires of Razorpay's inbound webhooks.</div>`;
+      <div class="hint">Select a merchant to manage webhook subscriptions.</div>`;
     root.appendChild(wrap);
     return;
   }
@@ -745,8 +724,7 @@ async function renderMerchantWebhooks(root) {
   } catch (e) { /* leave empty */ }
 
   wrap.innerHTML = `
-    <div style="font-weight:600; margin-bottom:8px;">Outbound Webhooks <span class="hint" style="text-transform:none;">for this merchant</span></div>
-    <div class="hint" style="margin-bottom:10px;">Recovery events (case opened/recovered/escalated/stopped) are POSTed here as JSON, signed with <code>X-RecoveryOS-Signature</code> (HMAC-SHA256 of the body using the secret shown at creation).</div>
+    <div style="font-weight:600; margin-bottom:10px;">Outbound Webhooks</div>
     ${subs.length ? `<table style="margin-bottom:12px;">
       <thead><tr><th>URL</th><th>Events</th><th>Status</th><th></th></tr></thead>
       <tbody>${subs.map(s => `<tr>

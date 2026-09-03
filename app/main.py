@@ -20,6 +20,7 @@ from app.models import PromiseToPay
 from app.policies.optimizer import strategy_performance
 from app.security import require_api_key, verify_webhook_signature, rate_limit
 from app.agents.ai_service import summarize_case
+from app.agents import ai_service
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -481,7 +482,9 @@ def integrations_status():
         },
         "llm_diagnosis": {
             "enabled": bool(os.getenv("LLM_API_KEY")),
-            "mode": "real LLM (Claude)" if os.getenv("LLM_API_KEY") else "deterministic rule engine",
+            "provider": ai_service.LLM_PROVIDER if os.getenv("LLM_API_KEY") else None,
+            "mode": (f"real LLM ({ai_service.LLM_PROVIDER})" if os.getenv("LLM_API_KEY")
+                     else "deterministic rule engine"),
         },
         "api_auth": {
             "enabled": bool(os.getenv("API_KEY")),

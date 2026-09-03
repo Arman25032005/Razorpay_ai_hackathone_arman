@@ -6,9 +6,11 @@ The LLM (or, in demo mode, a deterministic rule-based stand-in with the same
 JSON contract) NEVER calls providers directly — it only returns a structured
 decision object that the orchestrator validates and the policy engine gates.
 
-Set LLM_API_KEY in the environment to route diagnosis through a real model
-(Anthropic Claude via /v1/messages); otherwise ai_service falls back to the
-deterministic RULES engine below, which is fully offline and demo-safe.
+Set LLM_API_KEY in the environment to route diagnosis through a real
+model — Groq (OpenAI-compatible chat/completions) or Anthropic Claude
+(/v1/messages), auto-detected from the key format, see LLM_PROVIDER below;
+otherwise ai_service falls back to the deterministic RULES engine below,
+which is fully offline and demo-safe.
 """
 import json
 import os
