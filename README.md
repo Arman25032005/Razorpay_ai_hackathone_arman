@@ -1,5 +1,8 @@
 # RecoveryOS
 
+**🔗 Live demo: [recoveryos-lsk6.onrender.com](https://recoveryos-lsk6.onrender.com)** — login password: `Arman@2005`
+*(Free-tier hosting: the app sleeps after ~15 min idle — the first load after that can take 30–50s to wake up.)*
+
 AI-assisted revenue recovery agent for Razorpay merchants — detects
 failed payments and overdue invoices, diagnoses the cause, decides
 whether and how to recover it inside deterministic safety bounds,
