@@ -4,7 +4,7 @@
 
 This is a **real, honestly-evaluated logistic regression baseline**, not
 the XGBoost + MLflow production pipeline a fully-resourced version of this
-product would eventually want. Given the 3-day build window, the priority
+product would eventually want. The priority
 was: real data with documented causal structure, a real temporal
 train/val/test split, real metrics computed from actual execution — over
 a more sophisticated model trained and evaluated hastily. See
