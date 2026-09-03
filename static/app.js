@@ -13,12 +13,22 @@ function fmtMoney(n, currency = "INR") {
   if (Math.abs(n) >= 100000) return sym + (n / 100000).toFixed(2) + "L";
   return sym + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
+function utcDate(iso) {
+  // The backend serializes naive UTC datetimes (no offset suffix) — e.g.
+  // "2026-09-03T19:29:43.123456", not "...Z" or "...+00:00". Per the
+  // ECMAScript Date Time String spec, a date-time string with no timezone
+  // is parsed as LOCAL time, not UTC — so `new Date(iso)` silently
+  // displayed the raw UTC clock reading as if it were the viewer's local
+  // time (19:29 shown when it was actually 00:59 IST). Tag it as UTC
+  // explicitly before parsing so the browser converts it correctly.
+  if (typeof iso === "string" && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(iso)) iso += "Z";
+  return new Date(iso);
+}
 function fmtTime(iso) {
-  const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return utcDate(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 function fmtDate(iso) {
-  return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return utcDate(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 function toast(msg) {
   const t = $("#toast");
@@ -219,9 +229,15 @@ function showRunComplete(r) {
 }
 
 // ---------------------------------------------------------------- Router
+const VIEW_THINKING_LABEL = {
+  dashboard: "Gathering executive metrics", cases: "Loading recovery cases",
+  activity: "Loading agent activity", escalations: "Checking the human review queue",
+  analytics: "Crunching analytics", policies: "Loading policy configuration",
+  integrations: "Checking integration status",
+};
 async function render() {
   const root = $("#viewRoot");
-  root.innerHTML = '<div class="empty">Loading\u2026</div>';
+  root.innerHTML = thinkingPageHTML(VIEW_THINKING_LABEL[currentView] || "Loading");
   try {
     if (currentView === "dashboard") await renderDashboard(root);
     else if (currentView === "cases") await renderCases(root);
@@ -243,7 +259,7 @@ async function renderDashboard(root) {
     return;
   }
   root.innerHTML = `
-    <div class="grid grid-metrics">
+    <div class="grid grid-metrics reveal">
       <div class="card metric-card hero">
         <div class="metric-label">Revenue Recovered</div>
         <div class="metric-value green">${fmtMoney(d.revenue_recovered)}</div>
@@ -339,7 +355,7 @@ async function renderCases(root) {
   const cases = await api("/recovery-cases" + qs());
   root.innerHTML = `
     <div class="filters" id="filterBar"></div>
-    <div class="card">
+    <div class="card reveal">
       ${cases.length ? casesTable(cases) : '<div class="empty">No cases match this filter.</div>'}
     </div>
   `;
@@ -625,7 +641,7 @@ function healthScoreBadge(health) {
 // ---------------------------------------------------------------- Activity
 async function renderActivity(root) {
   const events = await api("/audit");
-  root.innerHTML = `<div class="card">
+  root.innerHTML = `<div class="card reveal">
     <div class="section-title">Agent Activity <small>${events.length} recent events</small></div>
     <div class="feed">${events.map(feedItem).join("") || '<div class="empty">No activity yet.</div>'}</div>
   </div>`;
@@ -636,12 +652,12 @@ async function renderEscalations(root) {
   const cases = await api("/recovery-cases?status=ESCALATED");
   const totalAtRisk = cases.reduce((s, c) => s + c.amount_at_risk, 0);
   root.innerHTML = `
-    <div class="card" style="margin-bottom:18px;">
+    <div class="card reveal" style="margin-bottom:18px;">
       <div class="metric-label">Needs Human Attention</div>
       <div class="metric-value amber">${cases.length} cases</div>
       <div class="metric-sub">${fmtMoney(totalAtRisk)} at risk</div>
     </div>
-    <div class="card">${cases.length ? casesTable(cases) : '<div class="empty">No cases currently need human review.</div>'}</div>
+    <div class="card reveal" style="animation-delay:.06s;">${cases.length ? casesTable(cases) : '<div class="empty">No cases currently need human review.</div>'}</div>
   `;
   $$("tr[data-case]").forEach(tr => tr.addEventListener("click", () => openCaseDetail(tr.dataset.case)));
 }
@@ -650,7 +666,7 @@ async function renderEscalations(root) {
 async function renderAnalytics(root) {
   const a = await api("/analytics" + mergeQs(mqs()));
   root.innerHTML = `
-    <div class="two-col">
+    <div class="two-col reveal">
       <div class="card">
         <div class="section-title">Recovered vs At-Risk by Segment</div>
         <canvas id="chartSegment" height="220"></canvas>
@@ -661,7 +677,7 @@ async function renderAnalytics(root) {
         <div class="metric-sub" style="margin-top:10px;">Automated rate: <b>${a.automated_vs_human.automated_rate}%</b></div>
       </div>
     </div>
-    <div class="card" style="margin-top:18px;">
+    <div class="card reveal" style="margin-top:18px; animation-delay:.1s;">
       <div class="section-title">Recovery Policy Optimizer <small>statistical ranking, not ML \u2014 which strategies actually recover money</small></div>
       ${strategyPerformanceTable(a.strategy_performance)}
     </div>
@@ -690,7 +706,7 @@ async function renderAnalytics(root) {
 async function renderPolicies(root) {
   const p = await api("/policies");
   root.innerHTML = `
-    <div class="card">
+    <div class="card reveal">
       <div class="section-title">Active Recovery Policy <small>enforced in code, not by the AI</small></div>
       <div class="policy-grid" id="policyGrid">
         ${policyField("max_attempts", "Max attempts", p.max_attempts, "number")}
@@ -750,7 +766,7 @@ async function renderIntegrations(root) {
     { name: "WhatsApp", on: whatsappOn, detail: whatsappOn ? "Twilio" : "Mock" },
     { name: "Database", on: true, detail: s.database.type === "postgresql" ? "PostgreSQL" : "SQLite" },
   ];
-  root.innerHTML = `<div class="integration-grid">
+  root.innerHTML = `<div class="integration-grid reveal">
     ${integrations.map(i => `
       <div class="card integration-card">
         <div style="font-weight:600; margin-bottom:8px;">${i.name}</div>
@@ -851,6 +867,7 @@ function showThinking(label) {
   box.className = "plan-box thinking-box";
   box.innerHTML = `
     <div class="thinking-label">
+      <span class="thinking-orb"></span>
       <span class="thinking-dots"><span></span><span></span><span></span></span>
       ${escapeHtml(label)}…
     </div>
@@ -859,6 +876,27 @@ function showThinking(label) {
     <div class="skeleton-line" style="width:76%"></div>
   `;
   card.appendChild(box);
+}
+
+// Full-page loading state shown while a view's data is in flight — the
+// same visual language (orb + dots + shimmer) as showThinking() above,
+// scaled up. `rows` controls how many feed-row-shaped skeleton lines are
+// drawn, so it reads as "this many items are coming" rather than one
+// generic bar.
+function thinkingPageHTML(label, rows = 5) {
+  const skeletonRows = Array.from({ length: rows }, (_, i) => `
+    <div class="skeleton-row">
+      <div class="skeleton-icon"></div>
+      <div class="skeleton-line" style="width:${72 - i * 6}%"></div>
+    </div>`).join("");
+  return `<div class="card thinking-page">
+    <div class="thinking-label">
+      <span class="thinking-orb"></span>
+      <span class="thinking-dots"><span></span><span></span><span></span></span>
+      ${escapeHtml(label)}…
+    </div>
+    <div>${skeletonRows}</div>
+  </div>`;
 }
 
 function escapeHtml(s) {

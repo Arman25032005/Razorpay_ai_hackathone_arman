@@ -213,6 +213,30 @@ tr.row-click:hover{background:var(--panel-2);}
 }
 .reveal{animation:reveal-in .35s ease both;}
 
+/* Page-level thinking state — the full-width version shown while a view
+   is loading (see render() in app.js), built from the same primitives. */
+.thinking-orb{
+  width:16px; height:16px; border-radius:50%; position:relative; flex-shrink:0;
+  background:radial-gradient(circle at 35% 30%, var(--accent-2), var(--accent) 65%, transparent 100%);
+  box-shadow:0 0 0 0 rgba(124,92,255,.5);
+  animation:orb-pulse 1.6s ease-in-out infinite;
+}
+@keyframes orb-pulse{
+  0%{box-shadow:0 0 0 0 rgba(124,92,255,.45);}
+  70%{box-shadow:0 0 0 9px rgba(124,92,255,0);}
+  100%{box-shadow:0 0 0 0 rgba(124,92,255,0);}
+}
+.thinking-page{display:flex; flex-direction:column; gap:14px;}
+.thinking-page .thinking-label{font-size:13.5px; gap:11px;}
+.thinking-page .skeleton-line{margin-top:0;}
+.thinking-page .skeleton-row{display:flex; gap:12px; align-items:center; padding:11px 6px; border-bottom:1px solid var(--border-soft);}
+.thinking-page .skeleton-row .skeleton-line{flex:1;}
+.thinking-page .skeleton-icon{
+  width:22px; height:22px; border-radius:7px; flex-shrink:0;
+  background:linear-gradient(100deg, var(--panel-2) 30%, var(--border) 50%, var(--panel-2) 70%);
+  background-size:250% 100%; animation:skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
 .two-col{display:grid; grid-template-columns:1.2fr .8fr; gap:18px;}
 @media (max-width:1000px){ .two-col,.grid-2{grid-template-columns:1fr;} }
 
