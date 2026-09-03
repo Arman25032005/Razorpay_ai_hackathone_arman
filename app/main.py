@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, Depends, HTTPException, Request, Header
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -18,14 +18,36 @@ from app.policies.engine import DEFAULT_POLICY, get_active_policy
 from app import webhooks as webhook_module
 from app.models import PromiseToPay
 from app.policies.optimizer import strategy_performance
-from app.security import require_api_key, verify_webhook_signature, rate_limit
+from app.security import require_api_key, verify_webhook_signature, rate_limit, is_authorized
 from app.agents.ai_service import summarize_case
 from app.agents import ai_service
+from app import auth
 
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="RecoverAI", description="AI Revenue Recovery Agent")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# Endpoints a browser must be able to reach before it has a session token
+# (the login exchange itself), and endpoints external systems call directly
+# rather than a logged-in human (Razorpay's webhooks, authenticated by their
+# own HMAC signature check, not this gate).
+_PUBLIC_API_PATHS = ("/api/auth/status", "/api/auth/login",
+                     "/api/webhooks/payment", "/api/webhooks/checkout", "/api/webhooks/invoice", "/api/events")
+
+
+@app.middleware("http")
+async def dashboard_login_gate(request: Request, call_next):
+    """When DASHBOARD_PASSWORD is set, every /api/ route (reads included —
+    a login gate that only protects writes still leaks all the data it's
+    supposed to be gating) requires either a valid session token or a valid
+    X-API-Key. No-op otherwise, so demo mode is unaffected."""
+    path = request.url.path
+    if (auth.login_required() and path.startswith("/api/") and path not in _PUBLIC_API_PATHS
+            and not is_authorized(request.headers.get("x-api-key"), request.headers.get("authorization"))):
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    return await call_next(request)
+
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -34,6 +56,34 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.get("/")
 def root():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+
+# ---------------------------------------------------------------------- auth
+@app.get("/api/auth/status")
+def auth_status(authorization: str | None = Header(default=None)):
+    """Tells the dashboard whether a login gate is active and whether the
+    token it's holding is still valid, so it can decide between showing the
+    login screen and going straight to the app."""
+    return {
+        "login_required": auth.login_required(),
+        "authenticated": (not auth.login_required()
+                          or auth.verify_session_token(auth.bearer_token(authorization))),
+    }
+
+
+@app.post("/api/auth/login")
+def auth_login(payload: dict, request: Request):
+    """Exchanges the dashboard password for a short-lived signed session
+    token. Rate-limited per IP — a login endpoint without one is an open
+    invitation to brute-force a single shared password."""
+    from app.security import LOGIN_RATE_LIMIT_MAX_REQUESTS
+    rate_limit(request, key_prefix="login", max_requests=LOGIN_RATE_LIMIT_MAX_REQUESTS)
+
+    if not auth.login_required():
+        raise HTTPException(400, "No dashboard password configured — login is disabled")
+    if not auth.check_password(payload.get("password")):
+        raise HTTPException(401, "Incorrect password")
+    return {"token": auth.create_session_token(), "expires_in": auth.SESSION_TTL_SECONDS}
 
 
 def case_to_dict(c: RecoveryCase) -> dict:

@@ -1020,3 +1020,127 @@ def test_webhook_subscription_rejects_invalid_url(db):
     with pytest.raises(HTTPException) as exc_info:
         create_merchant_webhook(m.id, {"url": "not-a-url"}, db=db)
     assert exc_info.value.status_code == 400
+
+
+# ---------------------------------------------------------------- Dashboard login gate tests
+def test_login_disabled_when_no_password_configured(monkeypatch):
+    from app import auth
+    monkeypatch.setattr(auth, "DASHBOARD_PASSWORD", None)
+    assert auth.login_required() is False
+    assert auth.check_password("anything") is False
+
+
+def test_correct_password_issues_valid_session_token(monkeypatch):
+    from app import auth
+    monkeypatch.setattr(auth, "DASHBOARD_PASSWORD", "correct-horse")
+    assert auth.login_required() is True
+    assert auth.check_password("correct-horse") is True
+    assert auth.check_password("wrong") is False
+
+    token = auth.create_session_token()
+    assert auth.verify_session_token(token) is True
+
+
+def test_session_token_rejects_tampering(monkeypatch):
+    from app import auth
+    monkeypatch.setattr(auth, "DASHBOARD_PASSWORD", "correct-horse")
+    token = auth.create_session_token()
+    expiry, _, signature = token.partition(".")
+    forged = f"{int(expiry) + 999999}.{signature}"  # extended expiry, stale signature
+    assert auth.verify_session_token(forged) is False
+    assert auth.verify_session_token("garbage") is False
+    assert auth.verify_session_token(None) is False
+
+
+def test_session_token_expires(monkeypatch):
+    from app import auth
+    monkeypatch.setattr(auth, "DASHBOARD_PASSWORD", "correct-horse")
+    expired_token = auth.create_session_token(ttl_seconds=-1)
+    assert auth.verify_session_token(expired_token) is False
+
+
+def test_bearer_token_extraction():
+    from app import auth
+    assert auth.bearer_token("Bearer abc123") == "abc123"
+    assert auth.bearer_token("bearer abc123") == "abc123"
+    assert auth.bearer_token("Basic abc123") is None
+    assert auth.bearer_token(None) is None
+    assert auth.bearer_token("") is None
+
+
+def test_is_authorized_accepts_either_credential(monkeypatch):
+    from app import security, auth
+    monkeypatch.setattr(auth, "DASHBOARD_PASSWORD", "correct-horse")
+    backup = security.API_KEY
+    try:
+        security.API_KEY = "the-api-key"
+        token = auth.create_session_token()
+
+        assert security.is_authorized(None, f"Bearer {token}") is True
+        assert security.is_authorized("the-api-key", None) is True
+        assert security.is_authorized("wrong-key", None) is False
+        assert security.is_authorized(None, "Bearer garbage") is False
+        assert security.is_authorized(None, None) is False
+    finally:
+        security.API_KEY = backup
+
+
+def test_login_endpoint_rejects_wrong_password(db, monkeypatch):
+    from app import auth
+    from app.main import auth_login
+    from fastapi import HTTPException, Request
+
+    monkeypatch.setattr(auth, "DASHBOARD_PASSWORD", "correct-horse")
+    scope = {"type": "http", "client": ("testclient", 1234), "headers": []}
+    request = Request(scope)
+
+    with pytest.raises(HTTPException) as exc_info:
+        auth_login({"password": "wrong"}, request)
+    assert exc_info.value.status_code == 401
+
+
+def test_login_endpoint_issues_token_for_correct_password(db, monkeypatch):
+    from app import auth
+    from app.main import auth_login
+    from fastapi import Request
+
+    monkeypatch.setattr(auth, "DASHBOARD_PASSWORD", "correct-horse")
+    scope = {"type": "http", "client": ("testclient", 1234), "headers": []}
+    request = Request(scope)
+
+    result = auth_login({"password": "correct-horse"}, request)
+    assert "token" in result
+    assert auth.verify_session_token(result["token"]) is True
+
+
+def test_login_endpoint_disabled_returns_400_when_no_password_set(db, monkeypatch):
+    from app import auth
+    from app.main import auth_login
+    from fastapi import HTTPException, Request
+
+    monkeypatch.setattr(auth, "DASHBOARD_PASSWORD", None)
+    scope = {"type": "http", "client": ("testclient", 1234), "headers": []}
+    request = Request(scope)
+
+    with pytest.raises(HTTPException) as exc_info:
+        auth_login({"password": "anything"}, request)
+    assert exc_info.value.status_code == 400
+
+
+def test_auth_status_reflects_login_gate_state(monkeypatch):
+    from app import auth
+    from app.main import auth_status
+
+    monkeypatch.setattr(auth, "DASHBOARD_PASSWORD", None)
+    status = auth_status(authorization=None)
+    assert status["login_required"] is False
+    assert status["authenticated"] is True
+
+    monkeypatch.setattr(auth, "DASHBOARD_PASSWORD", "correct-horse")
+    status = auth_status(authorization=None)
+    assert status["login_required"] is True
+    assert status["authenticated"] is False
+
+    token = auth.create_session_token()
+    status = auth_status(authorization=f"Bearer {token}")
+    assert status["authenticated"] is True

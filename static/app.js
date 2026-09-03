@@ -29,9 +29,18 @@ function toast(msg) {
 }
 async function api(path, opts = {}) {
   const apiKey = localStorage.getItem("recoverai_api_key");
+  const sessionToken = localStorage.getItem("recoverai_session_token");
   const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
   if (apiKey) headers["X-API-Key"] = apiKey;
+  if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
   const res = await fetch(API + path, { ...opts, headers });
+  if (res.status === 401 && path !== "/auth/login" && path !== "/auth/status") {
+    // Session expired or was never established — drop the stale token and
+    // let a reload re-run the auth check, which will show the login screen.
+    localStorage.removeItem("recoverai_session_token");
+    location.reload();
+    throw new Error("Session expired");
+  }
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -60,6 +69,53 @@ $("#themeToggleBtn").addEventListener("click", () => {
 });
 initTheme();
 
+// ---------------------------------------------------------------- Auth
+async function handleLogin() {
+  const pwInput = $("#loginPassword");
+  const btn = $("#loginSubmitBtn");
+  const errEl = $("#loginError");
+  errEl.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "Signing in…";
+  try {
+    const result = await api("/auth/login", { method: "POST", body: JSON.stringify({ password: pwInput.value }) });
+    localStorage.setItem("recoverai_session_token", result.token);
+    location.reload();
+  } catch (e) {
+    errEl.textContent = "Incorrect password";
+    btn.disabled = false;
+    btn.textContent = "Sign in";
+    pwInput.value = "";
+    pwInput.focus();
+  }
+}
+$("#loginSubmitBtn").addEventListener("click", handleLogin);
+$("#loginPassword").addEventListener("keydown", (e) => { if (e.key === "Enter") handleLogin(); });
+$("#logoutBtn").addEventListener("click", () => {
+  localStorage.removeItem("recoverai_session_token");
+  location.reload();
+});
+
+async function bootstrap() {
+  let status;
+  try {
+    status = await api("/auth/status");
+  } catch (e) {
+    status = { login_required: false, authenticated: true }; // fail open — never brick the demo on a check failure
+  }
+  if (status.login_required && !status.authenticated) {
+    $("#app").classList.add("gate-hidden");
+    $("#loginScreen").classList.remove("gate-hidden");
+    $("#loginPassword").focus();
+    return;
+  }
+  $("#loginScreen").classList.add("gate-hidden");
+  $("#app").classList.remove("gate-hidden");
+  if (status.login_required) $("#logoutBtn").classList.remove("gate-hidden");
+  await initMerchantSwitcher();
+  render();
+}
+
 // ---------------------------------------------------------------- Merchants (multi-tenant)
 function mqs() {
   // Appends merchant_id to a query string that may already have params.
@@ -84,7 +140,6 @@ async function initMerchantSwitcher() {
     sel.style.display = "none";
   }
 }
-initMerchantSwitcher();
 
 // ---------------------------------------------------------------- Nav
 $$(".nav-item").forEach(btn => {
@@ -384,20 +439,20 @@ async function openCaseDetail(id) {
         <span class="pill pill-${c.status.toLowerCase()}" style="font-size:12px; padding:6px 14px;">${c.status}</span>
       </div>
 
-      <div class="plan-box">
+      <div class="plan-box reveal">
         <h4>Why this happened</h4>
         <p>${c.root_cause ? c.root_cause.replace(/_/g, " ") : "Not yet diagnosed"}${c.root_cause_confidence ? ` (${Math.round(c.root_cause_confidence * 100)}% confidence)` : ""}</p>
       </div>
-      <div class="plan-box">
+      <div class="plan-box reveal" style="animation-delay:.06s;">
         <h4>AI Assessment</h4>
         <p>${escapeHtml(c.reasoning_summary || "\u2014")}</p>
       </div>
-      ${c.ml_prediction ? `<div class="plan-box" style="border-color:rgba(124,92,255,.35);">
+      ${c.ml_prediction ? `<div class="plan-box reveal" style="animation-delay:.12s; border-color:rgba(124,92,255,.35);">
           <h4>ML Recovery Probability <span class="hint" style="text-transform:none; letter-spacing:0;">(logistic regression baseline, trained + evaluated \u2014 see /api/models/current)</span></h4>
           <p style="font-size:22px; font-weight:800; font-family:var(--mono); color:var(--accent-2); margin-bottom:6px;">${Math.round(c.ml_prediction.probability * 100)}%</p>
           <p style="font-size:12.5px; color:var(--text-dim);">${c.ml_prediction.explanation.map(e => "\u2022 " + escapeHtml(e)).join("<br>")}</p>
         </div>` : ""}
-      ${c.expected_value ? `<div class="plan-box" style="border-color:${c.expected_value.recommendation === 'act' ? 'rgba(61,220,151,.35)' : c.expected_value.recommendation === 'do_not_act' ? 'rgba(255,107,107,.35)' : 'rgba(245,185,66,.35)'};">
+      ${c.expected_value ? `<div class="plan-box reveal" style="animation-delay:.18s; border-color:${c.expected_value.recommendation === 'act' ? 'rgba(61,220,151,.35)' : c.expected_value.recommendation === 'do_not_act' ? 'rgba(255,107,107,.35)' : 'rgba(245,185,66,.35)'};">
           <h4>Expected Value <span class="hint" style="text-transform:none; letter-spacing:0;">(P\u00d7amount \u2212 action cost \u2212 annoyance cost \u2212 risk cost \u2014 advisory only, never gates execution)</span></h4>
           <p style="font-size:22px; font-weight:800; font-family:var(--mono); margin-bottom:6px; color:${c.expected_value.expected_value > 0 ? 'var(--green)' : 'var(--red)'};">${fmtMoney(c.expected_value.expected_value, c.currency)}</p>
           <p style="font-size:12.5px; color:var(--text-dim);">
@@ -466,8 +521,9 @@ async function openCaseDetail(id) {
     </div>
   `;
   $("#backBtn").addEventListener("click", () => render());
-  const caseAction = (btnId, path) => {
+  const caseAction = (btnId, path, thinkingLabel) => {
     $(btnId)?.addEventListener("click", async () => {
+      if (thinkingLabel) showThinking(thinkingLabel);
       try {
         await api(`/recovery-cases/${id}${path}`, { method: "POST" });
         openCaseDetail(id);
@@ -476,8 +532,8 @@ async function openCaseDetail(id) {
       }
     });
   };
-  caseAction("#analyzeBtn", "/analyze");
-  caseAction("#executeBtn", "/execute");
+  caseAction("#analyzeBtn", "/analyze", "Diagnosing root cause and choosing a strategy");
+  caseAction("#executeBtn", "/execute", "Checking policy and executing the next action");
   caseAction("#approveBtn", "/approve");
   caseAction("#rejectBtn", "/reject");
   $("#sendLinkBtn")?.addEventListener("click", async () => {
@@ -786,9 +842,28 @@ function strategyPerformanceTable(rows) {
   </table>`;
 }
 
+// ---------------------------------------------------------------- Agent "thinking" state
+function showThinking(label) {
+  const card = $("#viewRoot .card");
+  if (!card) return;
+  card.querySelectorAll("button").forEach(b => { b.disabled = true; });
+  const box = document.createElement("div");
+  box.className = "plan-box thinking-box";
+  box.innerHTML = `
+    <div class="thinking-label">
+      <span class="thinking-dots"><span></span><span></span><span></span></span>
+      ${escapeHtml(label)}…
+    </div>
+    <div class="skeleton-line" style="width:87%"></div>
+    <div class="skeleton-line" style="width:64%"></div>
+    <div class="skeleton-line" style="width:76%"></div>
+  `;
+  card.appendChild(box);
+}
+
 function escapeHtml(s) {
   if (s == null) return "";
   return String(s).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 }
 
-render();
+bootstrap();

@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<div id="app">
+<div id="app" class="gate-hidden">
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-mark">R</div>
@@ -48,6 +48,7 @@
       <button id="replayBtn" class="btn-ghost full">↻ Replay Best Recovery</button>
       <button id="resetSimBtn" class="btn-ghost full">Reset demo data</button>
       <button id="themeToggleBtn" class="btn-ghost full">🌙 Dark mode</button>
+      <button id="logoutBtn" class="btn-ghost full gate-hidden">Sign out</button>
     </div>
   </aside>
 
@@ -63,6 +64,17 @@
       <!-- views injected here -->
     </div>
   </main>
+</div>
+
+<div id="loginScreen" class="login-screen gate-hidden">
+  <div class="login-card">
+    <div class="brand-mark">R</div>
+    <h1>RecoverAI</h1>
+    <div class="sub">Sign in to continue</div>
+    <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="loginSubmitBtn" class="btn-primary">Sign in</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
 </div>
 
 <div id="toast" class="toast hidden"></div>

@@ -97,7 +97,7 @@ credentials.
 | Machine learning | scikit-learn, pandas, numpy |
 | Payments | Razorpay REST API, with a mock provider fallback |
 | Messaging | SendGrid (email), Meta WhatsApp Cloud API / Twilio (WhatsApp), mock fallback |
-| Auth | `X-API-Key` header check, opt-in via `API_KEY` |
+| Auth | `X-API-Key` for machine callers (`API_KEY`) + a real password-login session gate for the dashboard (`DASHBOARD_PASSWORD`) |
 | Testing | pytest |
 
 ## Project structure
@@ -108,6 +108,7 @@ app/
 ├── models.py                  SQLAlchemy models
 ├── db.py                      Engine/session setup
 ├── security.py                API-key auth, webhook HMAC verification, rate limiting
+├── auth.py                    Dashboard password login -> signed session tokens
 ├── payment_state_machine.py   Payment state transitions + pre-action verification
 ├── webhooks.py                Webhook payload normalization/ingestion
 ├── decline_codes.py           Razorpay decline-code -> internal failure-reason classification
@@ -206,7 +207,8 @@ Full annotated list in `.env.example`.
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Real Razorpay API calls instead of the mock provider |
 | `LLM_API_KEY` | Diagnosis routed through a real LLM instead of the rule engine |
 | `PAYMENT_WEBHOOK_SECRET` | Requires HMAC-SHA256-signed webhooks |
-| `API_KEY` | Requires `X-API-Key` on mutating endpoints |
+| `API_KEY` | Requires `X-API-Key` on mutating endpoints (machine callers) |
+| `DASHBOARD_PASSWORD` | Requires a person to log in before the dashboard loads (gates every `/api/` route, not just writes) |
 | `SENDGRID_API_KEY` / `SENDGRID_FROM_EMAIL` | Real email delivery |
 | `META_WHATSAPP_TOKEN` / `META_WHATSAPP_PHONE_NUMBER_ID` | Real WhatsApp delivery via Meta Cloud API |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_FROM` | Real WhatsApp delivery via Twilio (used if Meta credentials are unset) |

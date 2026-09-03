@@ -7,7 +7,21 @@ was extracted directly from the route table (`grep '@app\.' app/main.py`),
 not hand-maintained separately from the code.
 
 Endpoints marked 🔒 require `X-API-Key` when `API_KEY` is set in the
-environment (no-op in default demo mode — see `docs/SECURITY.md`).
+environment (no-op in default demo mode — see `docs/SECURITY.md`). When
+`DASHBOARD_PASSWORD` is set, every `/api/` route below (reads included)
+additionally requires a valid session token or `X-API-Key` — see
+Authentication below.
+
+## Authentication
+
+```
+GET  /api/auth/status                        {login_required, authenticated} — public, always reachable
+POST /api/auth/login                         {password} -> {token, expires_in} — public, rate-limited per IP
+```
+
+Send the returned token as `Authorization: Bearer <token>` on subsequent
+requests. No-op (both endpoints report open/authenticated) unless
+`DASHBOARD_PASSWORD` is set. See `app/auth.py`.
 
 ## Dashboard & analytics
 
