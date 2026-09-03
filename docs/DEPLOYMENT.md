@@ -61,20 +61,20 @@ demo mode — the app runs fully functional with zero configuration.
 | `PAYMENT_WEBHOOK_SECRET` | Require signed webhooks | Signatures not required |
 | `API_KEY` | Require `X-API-Key` on mutating endpoints | Open (no auth) |
 
-## Honest gap: no CI/CD pipeline
+## CI/CD
 
-Spec section 44 asks for GitHub Actions (lint/test/build/security checks).
-**Not implemented in this build** — every verification in this project
-(73 passing tests, live smoke tests) was run manually during development,
-not automated on push/PR. This is a real, acknowledged gap for a 3-day
-build, not a claimed feature. A minimal first version would be:
+`.github/workflows/ci.yml` runs on every push and PR to `main`: installs
+`requirements.txt`, runs the full test suite (`pytest tests/ -q`), checks
+`static/app.js` syntax, and runs the ML pipeline end-to-end
+(`ml.data_generator` → `ml.train` → `ml.evaluate`) as a smoke test. The
+runner has no `.env`, so this always exercises the deterministic
+rule-engine / mock-provider path — no live Razorpay/LLM/SendGrid/Twilio
+calls happen in CI.
 
-```yaml
-# .github/workflows/ci.yml (not yet created)
-- pip install -r requirements.txt
-- pytest tests/ -q
-- python -m ml.train  # confirm the ML pipeline still runs end-to-end
-```
+CD is Render's own git-push-to-deploy: once the repo is connected via the
+`render.yaml` Blueprint (see below), every push to `main` that passes CI
+triggers a new Render deploy automatically — no separate deploy step or
+credentials needed in this repo.
 
 ## Frontend / backend split
 
@@ -85,7 +85,7 @@ deployment step, unlike the spec's Next.js-on-Vercel assumption. See
 
 ## Production readiness checklist (spec section 51, filled in honestly)
 
-- [x] Razorpay webhook works — request-shape verified against real docs; live round-trip NOT yet executed (needs real test-mode keys)
+- [x] Razorpay webhook works — request-shape verified against real docs; Payment Links creation verified live against `api.razorpay.com` with real test-mode keys (full payment-completion + inbound-webhook round-trip not yet executed)
 - [x] Webhook signature validation works (self-computed signature tested; not tested against a Razorpay-issued one)
 - [x] Duplicate webhooks handled
 - [x] Out-of-order events handled
@@ -110,7 +110,7 @@ deployment step, unlike the spec's Next.js-on-Vercel assumption. See
 - [x] Dashboard works
 - [x] Tests pass (73/73)
 - [x] Docker works
-- [ ] CI — not implemented
+- [x] CI — GitHub Actions runs tests + ML smoke test on every push/PR (`.github/workflows/ci.yml`)
 - [x] Secrets are not committed (`.gitignore` covers `.env`, `*.db`)
 - [x] README complete
 - [x] Deployment instructions complete (this document)

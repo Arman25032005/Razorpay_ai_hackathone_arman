@@ -13,7 +13,7 @@ tells a merchant "this payment failed." It does not investigate why, does
 not decide what to do, does not verify the outcome, and does not stop
 itself. RecoveryOS does all four, inside explicit safety bounds.
 
-## Why it matters (to a Razorpay-specific audience)
+## Why it matters 
 
 Razorpay processes payments for merchants; failed payments are Razorpay's
 own visible surface, but the *recovery* of that revenue is currently the
@@ -29,7 +29,7 @@ This is the section spec section 54 ("do not cheat — never claim a live
 integration when only mock integration exists") requires, made explicit
 and impossible to miss.
 
-### Built, real, tested (see the test suite — 73 passing tests)
+### Built, real, tested Web app
 
 - Full agent loop: detect -> diagnose -> decide -> policy-check -> act ->
   verify -> measure -> stop/escalate
@@ -73,7 +73,7 @@ and impossible to miss.
 
 - **XGBoost / MLflow-scale ML pipeline.** What's built is a real,
   evaluated logistic regression baseline on a modest (8,000-row) honestly-
-  generated synthetic dataset — appropriate for a 3-day build, not
+  generated synthetic dataset — not
   disguised as more than it is. Roadmap: swap in XGBoost, add MLflow
   experiment tracking, retrain on real (not synthetic) outcome data as it
   accumulates.
@@ -109,21 +109,4 @@ and impossible to miss.
   `docs/RAZORPAY_INTEGRATION.md` section 8 for the current "verified vs.
   not yet verified" breakdown).
 
-## Roadmap, in priority order
 
-1. ~~Wire real Razorpay test-mode credentials and confirm the live
-   round-trip~~ — Payment Links creation is now verified live. Remaining:
-   drive a real test-mode payment through to completion and confirm
-   inbound webhook delivery with a Razorpay-issued signature end to end.
-2. Retrain the recovery-probability model on real outcome data as it
-   accumulates from actual recovery cases, replacing the synthetic
-   dataset.
-3. Async webhook processing (queue + worker) once volume warrants it.
-4. Full RBAC so a merchant can invite team members with scoped
-   permissions, rather than the current single-key-per-deployment auth.
-5. SMS/WhatsApp live provider (currently mock-only).
-6. XGBoost + MLflow if/when the modest logistic-regression baseline
-   demonstrably underperforms it on real data — not before, since
-   complexity without a demonstrated need would be exactly the kind of
-   "flashy but fragile" choice this project's own guiding principle
-   (spec section 50/57) warns against.
