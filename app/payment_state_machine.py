@@ -84,7 +84,7 @@ def apply_transition(current: PaymentState | str, incoming: PaymentState | str) 
     incoming = PaymentState(incoming) if not isinstance(incoming, PaymentState) else incoming
 
     if current == incoming:
-        return TransitionResult(False, current, "Duplicate event — state unchanged, no-op (idempotent)")
+        return TransitionResult(False, current, "Duplicate event. State unchanged, no-op (idempotent)")
 
     if incoming not in _LEGAL_TRANSITIONS.get(current, set()):
         # Not a legal forward transition. Check if it's just a stale/
@@ -112,9 +112,9 @@ def verify_before_action(current_state: PaymentState | str) -> tuple[bool, str]:
     executed regardless."""
     state = PaymentState(current_state) if not isinstance(current_state, PaymentState) else current_state
     if state == PaymentState.CAPTURED:
-        return False, "Payment already captured — recovery action cancelled, nothing to recover"
+        return False, "Payment already captured. Recovery action cancelled, nothing to recover"
     if state == PaymentState.REFUNDED:
-        return False, "Payment was refunded — recovery action cancelled, this is not a recoverable case"
+        return False, "Payment was refunded. Recovery action cancelled, this is not a recoverable case"
     if state not in (PaymentState.FAILED, PaymentState.PENDING):
-        return False, f"Payment is in state '{state.value}', not a recoverable failure state — action cancelled"
+        return False, f"Payment is in state '{state.value}', not a recoverable failure state. Action cancelled"
     return True, "Payment confirmed still in a recoverable failed state"

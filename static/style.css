@@ -6,6 +6,7 @@
   --grad: linear-gradient(135deg,#5b8cff 0%, #7c5cff 100%);
   --radius:14px;
   --mono:'JetBrains Mono', monospace;
+  --topbar-bg: rgba(11,13,18,.85);
 }
 html[data-theme="light"]{
   --bg:#f5f6f9; --bg-2:#ffffff; --panel:#ffffff; --panel-2:#f0f2f7;
@@ -13,6 +14,7 @@ html[data-theme="light"]{
   --text:#161a24; --text-dim:#565f74; --text-faint:#8a91a3;
   --accent:#3d68e0; --accent-2:#6c4de0; --green:#1c9d6c; --amber:#b8791a; --red:#d6455a;
   --grad: linear-gradient(135deg,#3d68e0 0%, #6c4de0 100%);
+  --topbar-bg: rgba(255,255,255,.85);
 }
 *{box-sizing:border-box;}
 .gate-hidden{display:none !important;}
@@ -44,9 +46,16 @@ body{
 }
 .nav-item:hover{background:var(--panel); color:var(--text);}
 .nav-item.active{background:var(--panel-2); color:var(--text); box-shadow:inset 2px 0 0 var(--accent);}
-.nav-ico{width:16px; text-align:center; opacity:.85;}
+.nav-ico{width:16px; height:16px; display:inline-flex; opacity:.85; flex-shrink:0;}
 .sidebar-foot{display:flex; flex-direction:column; gap:8px; padding-top:14px; border-top:1px solid var(--border-soft);}
 .full{width:100%;}
+
+/* Icon system — a single hand-drawn line-icon set (see ICON_PATHS in
+   app.js) used everywhere instead of emoji or dingbat glyphs. */
+.icon{width:15px; height:15px; flex-shrink:0; vertical-align:-3px;}
+.spin{animation:spin 1s linear infinite;}
+.btn-primary,.btn-ghost{display:inline-flex; align-items:center; justify-content:center; gap:7px;}
+.btn-ico{display:inline-flex; flex-shrink:0;}
 
 .btn-primary{
   background:var(--grad); color:#fff; border:none; padding:11px 14px; border-radius:10px;
@@ -66,7 +75,7 @@ body{
 .topbar{
   height:60px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
   padding:0 28px; border-bottom:1px solid var(--border-soft); font-weight:700; font-size:17px;
-  position:sticky; top:0; background:rgba(11,13,18,.85); backdrop-filter:blur(8px); z-index:5;
+  position:sticky; top:0; background:var(--topbar-bg); backdrop-filter:blur(8px); z-index:5;
 }
 .badge-mode{
   font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; color:var(--amber);
@@ -121,7 +130,7 @@ tr.row-click:hover{background:var(--panel-2);}
 /* Feed */
 .feed{display:flex; flex-direction:column; gap:2px;}
 .feed-item{display:flex; gap:12px; padding:10px 6px; border-bottom:1px solid var(--border-soft); font-size:13px;}
-.feed-icon{width:22px; text-align:center; flex-shrink:0;}
+.feed-icon{width:22px; height:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--text-faint);}
 .feed-desc{flex:1; color:var(--text);}
 .feed-case{font-family:var(--mono); font-size:11px; color:var(--text-faint);}
 .feed-time{font-family:var(--mono); font-size:11px; color:var(--text-faint); white-space:nowrap;}
@@ -129,7 +138,17 @@ tr.row-click:hover{background:var(--panel-2);}
 /* Case detail */
 .case-hero{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;}
 .case-amount{font-size:32px; font-weight:800; font-family:var(--mono);}
+.case-amount-label{font-size:14px; font-weight:500; color:var(--text-faint); font-family:'Inter',sans-serif; margin-left:4px;}
 .case-sub{color:var(--text-faint); font-size:13px; margin-top:4px;}
+.case-sub .sep{opacity:.5; margin:0 2px;}
+
+/* Recovery health score — a compact table badge; see healthPill() and
+   customer_health_score() on the backend, weighted into case priority. */
+.health-pill{
+  display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:12px; font-weight:700;
+  padding:2px 9px 2px 7px; border-radius:99px; border:1px solid currentColor; cursor:default;
+}
+.health-dot{width:6px; height:6px; border-radius:50%; flex-shrink:0;}
 .kv{display:grid; grid-template-columns:1fr 1fr; gap:10px 20px; font-size:13px;}
 .kv div span{display:block; color:var(--text-faint); font-size:11px; text-transform:uppercase; letter-spacing:.04em; margin-bottom:3px;}
 
@@ -175,10 +194,9 @@ tr.row-click:hover{background:var(--panel-2);}
 }
 .toast.hidden{opacity:0; transform:translateY(10px); pointer-events:none;}
 
-.spin{display:inline-block; animation:spin 1s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 
-/* Agent "thinking" state — mirrors the Claude/Gemini pattern: an animated
+/* Agent "thinking" state: mirrors the Claude/Gemini pattern, an animated
    dot indicator + shimmering placeholder lines while a response is being
    generated, then a smooth reveal once it lands. */
 .thinking-box{border-color:rgba(124,92,255,.3); background:linear-gradient(160deg, rgba(124,92,255,.06), var(--panel-2) 60%);}
@@ -213,7 +231,7 @@ tr.row-click:hover{background:var(--panel-2);}
 }
 .reveal{animation:reveal-in .35s ease both;}
 
-/* Page-level thinking state — the full-width version shown while a view
+/* Page-level thinking state: the full-width version shown while a view
    is loading (see render() in app.js), built from the same primitives. */
 .thinking-orb{
   width:16px; height:16px; border-radius:50%; position:relative; flex-shrink:0;

@@ -80,7 +80,7 @@ def auth_login(payload: dict, request: Request):
     rate_limit(request, key_prefix="login", max_requests=LOGIN_RATE_LIMIT_MAX_REQUESTS)
 
     if not auth.login_required():
-        raise HTTPException(400, "No dashboard password configured — login is disabled")
+        raise HTTPException(400, "No dashboard password configured. Login is disabled")
     if not auth.check_password(payload.get("password")):
         raise HTTPException(401, "Incorrect password")
     return {"token": auth.create_session_token(), "expires_in": auth.SESSION_TTL_SECONDS}
@@ -92,6 +92,7 @@ def case_to_dict(c: RecoveryCase) -> dict:
         "customer_id": c.customer_id,
         "customer_name": c.customer.name if c.customer else None,
         "customer_type": c.customer.customer_type if c.customer else None,
+        "customer_health": ai_service.customer_health_score(c.customer) if c.customer else None,
         "source_type": c.source_type,
         "amount_at_risk": c.amount_at_risk,
         "currency": c.currency,
@@ -832,7 +833,7 @@ def fulfill_promise(promise_id: str, db: Session = Depends(get_db)):
         c.stop_reason = "PAYMENT_RECOVERED"
         c.resolved_at = utcnow()
         db.add(AuditEvent(case_id=c.id, actor_type="CUSTOMER", action="promise_fulfilled",
-                           description=f"Promise-to-pay fulfilled — {c.currency} {ptp.promised_amount:,.0f} recovered"))
+                           description=f"Promise-to-pay fulfilled. {c.currency} {ptp.promised_amount:,.0f} recovered"))
         db.add(AuditEvent(case_id=c.id, actor_type="SYSTEM", action="workflow_stopped",
                            description="Workflow stopped. Reason: PAYMENT_RECOVERED"))
     db.commit()

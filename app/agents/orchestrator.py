@@ -181,7 +181,7 @@ def analyze_case(db: Session, case: RecoveryCase, **event_kwargs) -> RecoveryCas
             escalation_reason=f"Diagnosis engine error: {type(exc).__name__}",
         )
         _log(db, case, "SYSTEM", "diagnosis_failed",
-             f"AI diagnosis unavailable ({type(exc).__name__}) — case marked for human review", {"error": str(exc)})
+             f"AI diagnosis unavailable ({type(exc).__name__}). Case marked for human review", {"error": str(exc)})
 
     case.current_step = STEP_CHOOSING_STRATEGY
     decision.recommended_strategy = _apply_strategy_optimizer(db, decision)
@@ -195,7 +195,7 @@ def analyze_case(db: Session, case: RecoveryCase, **event_kwargs) -> RecoveryCas
     case.status = "ACTION_READY" if not decision.human_escalation_required else "ESCALATED"
 
     _log(db, case, "AI_AGENT", "diagnosis_completed",
-         f"Root cause: {decision.root_cause} (confidence {decision.root_cause_confidence:.2f}). {ctx['name']} — {decision.customer_context_summary}",
+         f"Root cause: {decision.root_cause} (confidence {decision.root_cause_confidence:.2f}). {ctx['name']}: {decision.customer_context_summary}",
          {"strategy_scores": decision.strategy_scores})
 
     if decision.human_escalation_required:
@@ -266,7 +266,7 @@ def execute_next_action(db: Session, case: RecoveryCase) -> RecoveryCase:
                                  strategy=strategy, prior_attempts=case.attempt_count)
     _log(db, case, "SYSTEM", "decision_recorded",
          f"Decision: {'allow' if policy_result.allowed else 'block'} {strategy} "
-         f"(expected value {ev.expected_value:+.2f}) — {policy_result.reason}",
+         f"(expected value {ev.expected_value:+.2f}). {policy_result.reason}",
          {
              "decision": "allow" if policy_result.allowed else "block",
              "strategy": strategy, "root_cause": case.root_cause,
@@ -277,7 +277,7 @@ def execute_next_action(db: Session, case: RecoveryCase) -> RecoveryCase:
              "retry_count": case.attempt_count, "max_retries": policy["max_attempts"],
          })
     _log(db, case, "SYSTEM", "policy_check",
-         f"Policy check: {'PASSED' if policy_result.allowed else 'BLOCKED'} — {policy_result.reason}")
+         f"Policy check: {'PASSED' if policy_result.allowed else 'BLOCKED'}. {policy_result.reason}")
 
     if not policy_result.allowed:
         case.status = "ESCALATED"

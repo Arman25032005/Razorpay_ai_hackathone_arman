@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RecoverAI — AI Revenue Recovery Agent</title>
+<title>RecoverAI: AI Revenue Recovery Agent</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -20,35 +20,35 @@
         <div class="brand-sub">Revenue Recovery Agent</div>
       </div>
     </div>
-    <nav class="nav">
-      <button class="nav-item active" data-view="dashboard">
-        <span class="nav-ico">◆</span> Executive Dashboard
+    <nav class="nav" id="mainNav">
+      <button class="nav-item active" data-view="dashboard" data-icon="dashboard">
+        <span class="nav-ico"></span> Executive Dashboard
       </button>
-      <button class="nav-item" data-view="cases">
-        <span class="nav-ico">▤</span> Recovery Cases
+      <button class="nav-item" data-view="cases" data-icon="cases">
+        <span class="nav-ico"></span> Recovery Cases
       </button>
-      <button class="nav-item" data-view="activity">
-        <span class="nav-ico">◉</span> Agent Activity
+      <button class="nav-item" data-view="activity" data-icon="activity">
+        <span class="nav-ico"></span> Agent Activity
       </button>
-      <button class="nav-item" data-view="escalations">
-        <span class="nav-ico">⚑</span> Human Review Queue
+      <button class="nav-item" data-view="escalations" data-icon="escalations">
+        <span class="nav-ico"></span> Human Review Queue
       </button>
-      <button class="nav-item" data-view="analytics">
-        <span class="nav-ico">▦</span> Analytics
+      <button class="nav-item" data-view="analytics" data-icon="analytics">
+        <span class="nav-ico"></span> Analytics
       </button>
-      <button class="nav-item" data-view="policies">
-        <span class="nav-ico">⚙</span> Policies
+      <button class="nav-item" data-view="policies" data-icon="policies">
+        <span class="nav-ico"></span> Policies
       </button>
-      <button class="nav-item" data-view="integrations">
-        <span class="nav-ico">⇄</span> Integrations
+      <button class="nav-item" data-view="integrations" data-icon="integrations">
+        <span class="nav-ico"></span> Integrations
       </button>
     </nav>
     <div class="sidebar-foot">
-      <button id="runSimBtn" class="btn-primary full">▶ Run Recovery Simulation</button>
-      <button id="replayBtn" class="btn-ghost full">↻ Replay Best Recovery</button>
-      <button id="resetSimBtn" class="btn-ghost full">Reset demo data</button>
-      <button id="themeToggleBtn" class="btn-ghost full">🌙 Dark mode</button>
-      <button id="logoutBtn" class="btn-ghost full gate-hidden">Sign out</button>
+      <button id="runSimBtn" class="btn-primary full"><span class="btn-ico"></span><span class="btn-label">Run Recovery Simulation</span></button>
+      <button id="replayBtn" class="btn-ghost full"><span class="btn-ico"></span><span class="btn-label">Replay Best Recovery</span></button>
+      <button id="resetSimBtn" class="btn-ghost full"><span class="btn-ico"></span><span class="btn-label">Reset demo data</span></button>
+      <button id="themeToggleBtn" class="btn-ghost full"><span class="btn-ico"></span><span class="btn-label">Dark mode</span></button>
+      <button id="logoutBtn" class="btn-ghost full gate-hidden"><span class="btn-ico"></span><span class="btn-label">Sign out</span></button>
     </div>
   </aside>
 

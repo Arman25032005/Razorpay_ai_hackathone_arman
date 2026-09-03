@@ -108,7 +108,7 @@ def _diagnose_payment_failure(customer_ctx: dict, failure_reason: str) -> Decisi
         reason = "AI could not determine root cause with sufficient confidence"
     elif root_cause == "risk_or_compliance_decline":
         escalate = True
-        reason = "Risk/compliance decline — never auto-retried, requires human review"
+        reason = "Risk or compliance decline. Never auto-retried, requires human review"
 
     summary = (
         f"Customer has {successes} successful payment(s) and {failures} prior failure(s), "
@@ -116,7 +116,7 @@ def _diagnose_payment_failure(customer_ctx: dict, failure_reason: str) -> Decisi
     )
     reasoning = (
         f"Diagnosed as {root_cause.replace('_',' ')}. "
-        f"{'Historical behavior indicates a high-probability recoverable failure.' if reliable else 'Limited or mixed history — proceeding cautiously.'}"
+        f"{'Historical behavior indicates a high-probability recoverable failure.' if reliable else 'Limited or mixed history, proceeding cautiously.'}"
     )
 
     scores = [
@@ -135,7 +135,7 @@ def _diagnose_checkout_abandonment(customer_ctx: dict, amount: float) -> Decisio
         return Decision(
             "checkout_abandonment", 0.7,
             "Customer has already received multiple recovery messages for this cart.",
-            "human_escalation", "Repeated abandonment despite outreach — needs human judgment.",
+            "human_escalation", "Repeated abandonment despite outreach, needs human judgment.",
             True, "Exceeded automated re-engagement attempts",
             [{"strategy": "human_escalation", "score": 0.7, "reason": "Automation exhausted"}],
         )
@@ -144,7 +144,7 @@ def _diagnose_checkout_abandonment(customer_ctx: dict, amount: float) -> Decisio
         "checkout_abandonment", 0.85,
         "Customer reached checkout and entered payment details but did not complete purchase.",
         strategy,
-        "Cart abandonment after payment details were entered suggests hesitation rather than a hard blocker — a gentle reminder is likely to convert.",
+        "Cart abandonment after payment details were entered suggests hesitation rather than a hard blocker. A gentle reminder is likely to convert.",
         False, None,
         [{"strategy": strategy, "score": 0.78, "reason": "High-intent abandonment"}],
     )
@@ -321,7 +321,10 @@ def prioritize_cases(cases: list) -> list:
     sorted highest-priority first with a `priority_score`.
 
     Favors larger amounts, higher diagnosis confidence, fewer attempts
-    spent, and cases open longer (so old ones don't starve)."""
+    spent, cases open longer (so old ones don't starve), and customers
+    with a weaker recovery health score — a customer who rarely self-cures
+    a failed payment needs the agent to act, while a customer with a
+    strong payment history is more likely to resolve it on their own."""
     from app.models import utcnow
 
     scored = []
@@ -331,12 +334,15 @@ def prioritize_cases(cases: list) -> list:
         attempts_left_score = max(0, 1 - (c.attempt_count or 0) / 3)
         age_days = (utcnow() - c.created_at).days if c.created_at else 0
         staleness_score = min(age_days / 7, 1.0)
+        health = customer_health_score(c.customer) if c.customer else None
+        health_risk_score = (100 - health["score"]) / 100 if health else 0.5
 
         priority = (
-            0.40 * amount_score +
-            0.30 * confidence_score +
+            0.35 * amount_score +
+            0.25 * confidence_score +
             0.15 * attempts_left_score +
-            0.15 * staleness_score
+            0.10 * staleness_score +
+            0.15 * health_risk_score
         )
         scored.append((round(priority, 4), c))
 
@@ -355,7 +361,7 @@ def summarize_case(case) -> str:
     parts.append(f"status: {case.status}")
     if case.attempt_count:
         parts.append(f"{case.attempt_count} attempt(s)")
-    return " — ".join(parts)
+    return ". ".join(parts)
 
 
 # ---- Customer Recovery Health Score (creative addition) --------------------
@@ -371,7 +377,7 @@ def customer_health_score(customer) -> dict:
     failed = len([p for p in payments if p.status == "failed"])
 
     if total == 0:
-        return {"score": 50, "band": "unknown", "reason": "No payment history yet — neutral score."}
+        return {"score": 50, "band": "unknown", "reason": "No payment history yet. Neutral score."}
 
     success_rate = successful / total
     recency_bonus = 10 if failed == 0 else 0
@@ -381,13 +387,13 @@ def customer_health_score(customer) -> dict:
     score = round(min(max(raw_score, 0), 100))
 
     if score >= 80:
-        band, reason = "excellent", f"{successful}/{total} payments succeeded — highly reliable payer."
+        band, reason = "excellent", f"{successful}/{total} payments succeeded. Highly reliable payer."
     elif score >= 60:
-        band, reason = "good", f"{successful}/{total} payments succeeded — generally reliable."
+        band, reason = "good", f"{successful}/{total} payments succeeded. Generally reliable."
     elif score >= 40:
-        band, reason = "fair", f"{successful}/{total} payments succeeded — mixed history, worth a closer look."
+        band, reason = "fair", f"{successful}/{total} payments succeeded. Mixed history, worth a closer look."
     else:
-        band, reason = "at-risk", f"Only {successful}/{total} payments succeeded — poor payment reliability."
+        band, reason = "at-risk", f"Only {successful}/{total} payments succeeded. Poor payment reliability."
 
     return {"score": score, "band": band, "reason": reason}
 

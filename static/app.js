@@ -14,10 +14,10 @@ function fmtMoney(n, currency = "INR") {
   return sym + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 function utcDate(iso) {
-  // The backend serializes naive UTC datetimes (no offset suffix) — e.g.
+  // The backend serializes naive UTC datetimes (no offset suffix), e.g.
   // "2026-09-03T19:29:43.123456", not "...Z" or "...+00:00". Per the
   // ECMAScript Date Time String spec, a date-time string with no timezone
-  // is parsed as LOCAL time, not UTC — so `new Date(iso)` silently
+  // is parsed as LOCAL time, not UTC, so `new Date(iso)` silently
   // displayed the raw UTC clock reading as if it were the viewer's local
   // time (19:29 shown when it was actually 00:59 IST). Tag it as UTC
   // explicitly before parsing so the browser converts it correctly.
@@ -30,6 +30,47 @@ function fmtTime(iso) {
 function fmtDate(iso) {
   return utcDate(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
+// ---------------------------------------------------------------- Icons
+// A small hand-drawn line-icon set (stroke = currentColor) so the UI never
+// depends on emoji glyphs or an external icon font/CDN.
+const ICON_PATHS = {
+  dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  cases: '<path d="M3 7.5 12 3l9 4.5-9 4.5-9-4.5Z"/><path d="M3 12l9 4.5 9-4.5"/><path d="M3 16.5 12 21l9-4.5"/>',
+  activity: '<path d="M3 12h4l2.5-7L14 19l2.5-7H21"/>',
+  escalations: '<path d="M5 3v18"/><path d="M5 4h11l-2.5 4L16 12H5"/>',
+  analytics: '<path d="M4 20V10"/><path d="M11 20V4"/><path d="M18 20v-7"/><path d="M2 20h20"/>',
+  policies: '<path d="M12 3l7 3v5c0 4.6-3 7.9-7 9-4-1.1-7-4.4-7-9V6l7-3Z"/><path d="m9 12 2 2 4-4"/>',
+  integrations: '<circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M8.5 7.5 15.5 16.5"/><circle cx="18" cy="6" r="3"/><path d="M15.5 7.5 8.8 15.8"/>',
+  play: '<path d="M7 4.5v15l13-7.5-13-7.5Z"/>',
+  replay: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>',
+  reset: '<path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/>',
+  sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/>',
+  moon: '<path d="M20 14.3A8.4 8.4 0 1 1 9.7 4a6.6 6.6 0 0 0 10.3 10.3Z"/>',
+  logout: '<path d="M15 4H6a1.5 1.5 0 0 0-1.5 1.5v13A1.5 1.5 0 0 0 6 20h9"/><path d="M10 12h11m0 0-3.5-3.5M21 12l-3.5 3.5"/>',
+  caseCreated: '<path d="M4 6.5A1.5 1.5 0 0 1 5.5 5H10l2 2.5h6.5A1.5 1.5 0 0 1 20 9v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18Z"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/>',
+  cpu: '<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M6 2v2M18 2v2M6 20v2M18 20v2"/>',
+  check: '<circle cx="12" cy="12" r="8.5"/><path d="m8.2 12.3 2.6 2.6 5-5.2"/>',
+  mail: '<rect x="3" y="5.5" width="18" height="13" rx="1.5"/><path d="m4 7 8 6 8-6"/>',
+  card: '<rect x="3" y="5.5" width="18" height="13" rx="1.5"/><path d="M3 10h18"/>',
+  user: '<circle cx="12" cy="8.3" r="3.3"/><path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/>',
+  money: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.2v9.6M14.6 9.3c0-1.1-1.2-2-2.6-2s-2.6.9-2.6 2 1.2 1.6 2.6 2 2.6.9 2.6 2-1.2 2-2.6 2-2.6-.9-2.6-2"/>',
+  stop: '<path d="M7.5 3h9L21 7.5v9L16.5 21h-9L3 16.5v-9Z"/><path d="M9 9l6 6M15 9l-6 6"/>',
+  warning: '<path d="M12 3.5 21.5 20h-19L12 3.5Z"/><path d="M12 9.7v4.3"/><path d="M12 17h.01"/>',
+  thumbsUp: '<path d="M7 11v9H4.5A1.5 1.5 0 0 1 3 18.5v-6A1.5 1.5 0 0 1 4.5 11H7Zm0 0 3.5-7a2 2 0 0 1 2 2v3.5H18a2 2 0 0 1 2 2.4l-1.4 6A2 2 0 0 1 16.7 20H10a3 3 0 0 1-3-3"/>',
+  xCircle: '<circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6M15 9l-6 6"/>',
+  link: '<path d="M9.5 14.5 14.5 9.5"/><path d="M11 6.5 13 4.6a3.6 3.6 0 0 1 5.1 5.1L16.2 11.6"/><path d="M13 17.5l-2 1.9a3.6 3.6 0 0 1-5.1-5.1l1.9-1.9"/>',
+  arrowLeft: '<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>',
+  download: '<path d="M12 3.5v11.5"/><path d="m7 10.5 5 5 5-5"/><path d="M4.5 19h15"/>',
+  spinner: '<circle cx="12" cy="12" r="8.5" opacity=".25"/><path d="M20.5 12a8.5 8.5 0 0 0-8.5-8.5"/>',
+  dot: '<circle cx="12" cy="12" r="3"/>',
+  pulse: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.3 2"/>',
+};
+function icon(name, cls = "") {
+  const path = ICON_PATHS[name] || ICON_PATHS.dot;
+  return `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+}
+
 function toast(msg) {
   const t = $("#toast");
   t.textContent = msg;
@@ -45,7 +86,7 @@ async function api(path, opts = {}) {
   if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
   const res = await fetch(API + path, { ...opts, headers });
   if (res.status === 401 && path !== "/auth/login" && path !== "/auth/status") {
-    // Session expired or was never established — drop the stale token and
+    // Session expired or was never established. Drop the stale token and
     // let a reload re-run the auth check, which will show the login screen.
     localStorage.removeItem("recoverai_session_token");
     location.reload();
@@ -56,11 +97,20 @@ async function api(path, opts = {}) {
 }
 
 const ACTION_ICON = {
-  case_created: "\ud83d\udcc2", context_retrieval: "\ud83d\udd0d", diagnosis_completed: "\ud83e\udd16",
-  policy_check: "\u2705", message_sent: "\u2709", payment_retry_result: "\ud83d\udcb3",
-  customer_action: "\ud83d\udc64", recovered: "\ud83d\udcb0", workflow_stopped: "\ud83d\uded1",
-  escalated: "\u26a0", human_approved: "\ud83d\udc4d", human_rejected: "\u274c",
+  case_created: "caseCreated", context_retrieval: "search", diagnosis_completed: "cpu",
+  policy_check: "check", message_sent: "mail", payment_retry_result: "card",
+  customer_action: "user", recovered: "money", workflow_stopped: "stop",
+  escalated: "warning", human_approved: "thumbsUp", human_rejected: "xCircle",
 };
+
+// ---------------------------------------------------------------- Static chrome icons
+$$(".nav-item[data-icon]").forEach(btn => {
+  $(".nav-ico", btn).innerHTML = icon(btn.dataset.icon);
+});
+$("#runSimBtn .btn-ico").innerHTML = icon("play");
+$("#replayBtn .btn-ico").innerHTML = icon("replay");
+$("#resetSimBtn .btn-ico").innerHTML = icon("reset");
+$("#logoutBtn .btn-ico").innerHTML = icon("logout");
 
 // ---------------------------------------------------------------- Theme
 function initTheme() {
@@ -71,13 +121,23 @@ function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
   localStorage.setItem("recoverai_theme", theme);
   const btn = $("#themeToggleBtn");
-  if (btn) btn.textContent = theme === "light" ? "\u2600\ufe0f Light mode" : "\ud83c\udf19 Dark mode";
+  if (btn) {
+    $(".btn-ico", btn).innerHTML = icon(theme === "light" ? "sun" : "moon");
+    $(".btn-label", btn).textContent = theme === "light" ? "Light mode" : "Dark mode";
+  }
 }
 $("#themeToggleBtn").addEventListener("click", () => {
   const current = document.documentElement.getAttribute("data-theme") || "dark";
   applyTheme(current === "light" ? "dark" : "light");
+  render(); // charts read theme colors at draw time, so redraw them on toggle
 });
 initTheme();
+
+// Reads a CSS custom property's current value (theme-aware), for handing
+// to Chart.js, which bakes colors in at draw time rather than via CSS.
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
 
 // ---------------------------------------------------------------- Auth
 async function handleLogin() {
@@ -111,7 +171,7 @@ async function bootstrap() {
   try {
     status = await api("/auth/status");
   } catch (e) {
-    status = { login_required: false, authenticated: true }; // fail open — never brick the demo on a check failure
+    status = { login_required: false, authenticated: true }; // fail open, never brick the demo on a check failure
   }
   if (status.login_required && !status.authenticated) {
     $("#app").classList.add("gate-hidden");
@@ -171,11 +231,24 @@ $("#resetSimBtn").addEventListener("click", async () => {
   render();
 });
 
+function setBtnBusy(btn, busy, label) {
+  const icoEl = $(".btn-ico", btn);
+  const labelEl = $(".btn-label", btn);
+  btn.disabled = busy;
+  if (busy) {
+    icoEl.dataset.restore = icoEl.innerHTML;
+    icoEl.innerHTML = icon("spinner", "spin");
+    labelEl.dataset.restore = labelEl.textContent;
+    labelEl.textContent = label;
+  } else {
+    icoEl.innerHTML = icoEl.dataset.restore || icoEl.innerHTML;
+    labelEl.textContent = labelEl.dataset.restore || labelEl.textContent;
+  }
+}
+
 async function replayBestRecovery() {
   const btn = $("#replayBtn");
-  const original = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = "Replaying\u2026";
+  setBtnBusy(btn, true, "Replaying\u2026");
   try {
     const c = await api("/simulation/replay-best", { method: "POST" });
     toast(`Hero case replayed: ${c.status}`);
@@ -185,15 +258,13 @@ async function replayBestRecovery() {
   } catch (e) {
     toast("Run a simulation first, then replay.");
   } finally {
-    btn.disabled = false;
-    btn.textContent = original;
+    setBtnBusy(btn, false);
   }
 }
 
 async function runSimulation() {
   const btn = $("#runSimBtn");
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin">\u25CC</span> Running agent workflows\u2026';
+  setBtnBusy(btn, true, "Running agent workflows\u2026");
   try {
     const result = await api("/simulation/run", { method: "POST" });
     toast(`Run complete: ${fmtMoney(result.revenue_recovered)} recovered of ${fmtMoney(result.revenue_analyzed)} analyzed`);
@@ -203,8 +274,7 @@ async function runSimulation() {
   } catch (e) {
     toast("Simulation failed: " + e.message);
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = "\u25b6 Run Recovery Simulation";
+    setBtnBusy(btn, false);
   }
 }
 
@@ -309,7 +379,7 @@ async function renderDashboard(root) {
 
 function feedItem(e) {
   return `<div class="feed-item">
-    <div class="feed-icon">${ACTION_ICON[e.action] || "\u2022"}</div>
+    <div class="feed-icon">${icon(ACTION_ICON[e.action] || "dot")}</div>
     <div class="feed-desc">${escapeHtml(e.description)} <span class="feed-case">${e.case_id}</span></div>
     <div class="feed-time">${fmtTime(e.timestamp)}</div>
   </div>`;
@@ -323,14 +393,14 @@ function drawStrategyChart(data) {
     type: "bar",
     data: {
       labels: data.map(x => x.strategy.replace(/_/g, " ")),
-      datasets: [{ data: data.map(x => x.amount), backgroundColor: "#5b8cff", borderRadius: 6 }],
+      datasets: [{ data: data.map(x => x.amount), backgroundColor: cssVar("--accent"), borderRadius: 6 }],
     },
     options: {
       indexAxis: "y",
       plugins: { legend: { display: false } },
       scales: {
-        x: { ticks: { color: "#9aa4b8" }, grid: { color: "#1b202c" } },
-        y: { ticks: { color: "#eef1f7" }, grid: { display: false } },
+        x: { ticks: { color: cssVar("--text-faint") }, grid: { color: cssVar("--border-soft") } },
+        y: { ticks: { color: cssVar("--text") }, grid: { display: false } },
       },
     },
   });
@@ -339,14 +409,14 @@ function drawStatusChart(data) {
   const ctx = $("#chartStatus");
   if (!ctx) return;
   if (charts.status) charts.status.destroy();
-  const colors = { RECOVERED: "#3ddc97", ESCALATED: "#ff6b6b", ACTION_READY: "#5b8cff", ANALYZING: "#7c5cff", STOPPED: "#f5b942", OPEN: "#9aa4b8", EXECUTING: "#5b8cff" };
+  const colors = { RECOVERED: cssVar("--green"), ESCALATED: cssVar("--red"), ACTION_READY: cssVar("--accent"), ANALYZING: cssVar("--accent-2"), STOPPED: cssVar("--amber"), OPEN: cssVar("--text-faint"), EXECUTING: cssVar("--accent") };
   charts.status = new Chart(ctx, {
     type: "doughnut",
     data: {
       labels: data.map(x => x.status),
-      datasets: [{ data: data.map(x => x.count), backgroundColor: data.map(x => colors[x.status] || "#5b6478"), borderWidth: 0 }],
+      datasets: [{ data: data.map(x => x.count), backgroundColor: data.map(x => colors[x.status] || cssVar("--text-faint")), borderWidth: 0 }],
     },
-    options: { plugins: { legend: { position: "bottom", labels: { color: "#9aa4b8", boxWidth: 10, font: { size: 11 } } } } },
+    options: { plugins: { legend: { position: "bottom", labels: { color: cssVar("--text-faint"), boxWidth: 10, font: { size: 11 } } } } },
   });
 }
 
@@ -371,8 +441,8 @@ async function renderCases(root) {
       e.stopPropagation();
       const caseId = btn.dataset.case;
       const action = btn.dataset.quickAction;
-      const original = btn.textContent;
-      btn.textContent = "\u2026";
+      const original = btn.innerHTML;
+      btn.innerHTML = icon("spinner", "spin");
       btn.disabled = true;
       try {
         await api(`/recovery-cases/${caseId}/${action}`, { method: "POST" });
@@ -380,18 +450,18 @@ async function renderCases(root) {
         render();
       } catch (err) {
         toast("Action failed: " + err.message);
-        btn.textContent = original;
+        btn.innerHTML = original;
         btn.disabled = false;
       }
     });
   });
 }
 function qs() {
-  const p = [];
+  const p = ["prioritized=true"];
   if (caseFilter.status) p.push("status=" + caseFilter.status);
   if (caseFilter.source_type) p.push("source_type=" + caseFilter.source_type);
   if (currentMerchantId) p.push("merchant_id=" + currentMerchantId);
-  return p.length ? "?" + p.join("&") : "";
+  return "?" + p.join("&");
 }
 function renderFilters() {
   const statuses = [null, "OPEN", "ANALYZING", "ACTION_READY", "RECOVERED", "ESCALATED", "STOPPED"];
@@ -400,7 +470,7 @@ function renderFilters() {
   bar.innerHTML = statuses.map(s => chip(s, "status", s ? s.replace(/_/g, " ") : "All statuses")).join("") +
     '<span style="width:1px;background:var(--border);margin:0 6px;"></span>' +
     sources.map(s => chip(s, "source_type", s ? s.replace(/_/g, " ") : "All sources")).join("") +
-    `<div style="margin-left:auto;"><a class="btn-ghost btn-sm" id="exportCsvBtn" style="text-decoration:none; display:inline-block;">\u2b07 Export CSV</a></div>`;
+    `<div style="margin-left:auto;"><a class="btn-ghost btn-sm" id="exportCsvBtn" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">${icon("download")} Export CSV</a></div>`;
   $$(".chip", bar).forEach(c => c.addEventListener("click", () => {
     caseFilter[c.dataset.key] = c.dataset.val === "null" ? null : c.dataset.val;
     render();
@@ -413,17 +483,18 @@ function chip(val, key, label) {
 }
 function casesTable(cases) {
   return `<table>
-    <thead><tr><th>Customer</th><th>Amount</th><th>Source</th><th>Diagnosis</th><th>Strategy</th><th>Status</th><th>Confidence</th><th>Quick actions</th></tr></thead>
+    <thead><tr><th>Customer</th><th>Health</th><th>Amount</th><th>Source</th><th>Diagnosis</th><th>Strategy</th><th>Status</th><th>Confidence</th><th>Quick actions</th></tr></thead>
     <tbody>
       ${cases.map(c => `
         <tr class="row-click" data-case="${c.id}">
-          <td>${escapeHtml(c.customer_name || "\u2014")}</td>
+          <td><b>${escapeHtml(c.customer_name || "\u2013")}</b></td>
+          <td>${healthPill(c.customer_health)}</td>
           <td style="font-family:var(--mono)">${fmtMoney(c.amount_at_risk, c.currency)}</td>
           <td>${(c.source_type || "").replace(/_/g, " ")}</td>
-          <td>${c.root_cause ? c.root_cause.replace(/_/g, " ") : "\u2014"}</td>
-          <td>${c.recommended_strategy ? c.recommended_strategy.replace(/_/g, " ") : "\u2014"}</td>
+          <td>${c.root_cause ? c.root_cause.replace(/_/g, " ") : "\u2013"}</td>
+          <td>${c.recommended_strategy ? c.recommended_strategy.replace(/_/g, " ") : "\u2013"}</td>
           <td><span class="pill pill-${c.status.toLowerCase()}">${c.status}</span></td>
-          <td>${c.root_cause_confidence ? Math.round(c.root_cause_confidence * 100) + "%" : "\u2014"}</td>
+          <td>${c.root_cause_confidence ? Math.round(c.root_cause_confidence * 100) + "%" : "\u2013"}</td>
           <td>${quickActionButtons(c)}</td>
         </tr>`).join("")}
     </tbody>
@@ -436,7 +507,7 @@ function quickActionButtons(c) {
   if (["ACTION_READY", "ANALYZING"].includes(c.status)) {
     return `<button class="btn-ghost btn-sm" data-quick-action="execute" data-case="${c.id}" style="padding:4px 9px; font-size:11px;">Execute</button>`;
   }
-  return `<span class="hint">\u2014</span>`;
+  return `<span class="hint">\u2013</span>`;
 }
 
 // ---------------------------------------------------------------- Case Detail (modal-as-view)
@@ -445,65 +516,65 @@ async function openCaseDetail(id) {
   const root = $("#viewRoot");
   const statusClass = c.status === "RECOVERED" ? "recovered" : c.status === "ESCALATED" ? "escalated" : "stopped";
   root.innerHTML = `
-    <button class="btn-ghost btn-sm" id="backBtn" style="margin-bottom:16px;">\u2190 Back to cases</button>
+    <button class="btn-ghost btn-sm" id="backBtn" style="margin-bottom:16px;">${icon("arrowLeft")} Back to cases</button>
     <div class="card">
       <div class="case-hero">
         <div>
-          <div class="case-sub">${escapeHtml(c.customer_name)} \u2022 ${c.customer_type || ""}</div>
-          <div class="case-amount">${fmtMoney(c.amount_at_risk, c.currency)} at risk</div>
+          <div class="case-sub">${escapeHtml(c.customer_name)} <span class="sep">&middot;</span> ${c.customer_type || ""}</div>
+          <div class="case-amount">${fmtMoney(c.amount_at_risk, c.currency)} <span class="case-amount-label">at risk</span></div>
         </div>
         <span class="pill pill-${c.status.toLowerCase()}" style="font-size:12px; padding:6px 14px;">${c.status}</span>
       </div>
 
       <div class="plan-box reveal">
         <h4>Why this happened</h4>
-        <p>${c.root_cause ? c.root_cause.replace(/_/g, " ") : "Not yet diagnosed"}${c.root_cause_confidence ? ` (${Math.round(c.root_cause_confidence * 100)}% confidence)` : ""}</p>
+        <p>${c.root_cause ? `<b>${c.root_cause.replace(/_/g, " ")}</b>` : "Not yet diagnosed"}${c.root_cause_confidence ? ` (${Math.round(c.root_cause_confidence * 100)}% confidence)` : ""}</p>
       </div>
       <div class="plan-box reveal" style="animation-delay:.06s;">
-        <h4>AI Assessment</h4>
-        <p>${escapeHtml(c.reasoning_summary || "\u2014")}</p>
+        <h4>AI assessment</h4>
+        <p>${escapeHtml(c.reasoning_summary || "\u2013")}</p>
       </div>
       ${c.ml_prediction ? `<div class="plan-box reveal" style="animation-delay:.12s; border-color:rgba(124,92,255,.35);">
-          <h4>ML Recovery Probability <span class="hint" style="text-transform:none; letter-spacing:0;">(logistic regression baseline, trained + evaluated \u2014 see /api/models/current)</span></h4>
+          <h4>ML recovery probability <span class="hint" style="text-transform:none; letter-spacing:0;">(logistic regression baseline, trained and evaluated; see /api/models/current)</span></h4>
           <p style="font-size:22px; font-weight:800; font-family:var(--mono); color:var(--accent-2); margin-bottom:6px;">${Math.round(c.ml_prediction.probability * 100)}%</p>
-          <p style="font-size:12.5px; color:var(--text-dim);">${c.ml_prediction.explanation.map(e => "\u2022 " + escapeHtml(e)).join("<br>")}</p>
+          <p style="font-size:12.5px; color:var(--text-dim);">${c.ml_prediction.explanation.map(e => "&middot; " + escapeHtml(e)).join("<br>")}</p>
         </div>` : ""}
       ${c.expected_value ? `<div class="plan-box reveal" style="animation-delay:.18s; border-color:${c.expected_value.recommendation === 'act' ? 'rgba(61,220,151,.35)' : c.expected_value.recommendation === 'do_not_act' ? 'rgba(255,107,107,.35)' : 'rgba(245,185,66,.35)'};">
-          <h4>Expected Value <span class="hint" style="text-transform:none; letter-spacing:0;">(P\u00d7amount \u2212 action cost \u2212 annoyance cost \u2212 risk cost \u2014 advisory only, never gates execution)</span></h4>
+          <h4>Expected value <span class="hint" style="text-transform:none; letter-spacing:0;">(probability &times; amount, minus action, annoyance and risk cost; advisory only, never gates execution)</span></h4>
           <p style="font-size:22px; font-weight:800; font-family:var(--mono); margin-bottom:6px; color:${c.expected_value.expected_value > 0 ? 'var(--green)' : 'var(--red)'};">${fmtMoney(c.expected_value.expected_value, c.currency)}</p>
           <p style="font-size:12.5px; color:var(--text-dim);">
             Recommendation: <b>${c.expected_value.recommendation.replace(/_/g, " ")}</b><br>
-            Action cost: ${fmtMoney(c.expected_value.action_cost, c.currency)} \u00b7 Annoyance cost: ${fmtMoney(c.expected_value.annoyance_cost, c.currency)} \u00b7 Risk cost: ${fmtMoney(c.expected_value.risk_cost, c.currency)}
+            Action cost: ${fmtMoney(c.expected_value.action_cost, c.currency)} &middot; Annoyance cost: ${fmtMoney(c.expected_value.annoyance_cost, c.currency)} &middot; Risk cost: ${fmtMoney(c.expected_value.risk_cost, c.currency)}
           </p>
         </div>` : ""}
       <div class="plan-box">
-        <h4>Recommended Plan</h4>
-        <p>Strategy: <b>${c.recommended_strategy ? c.recommended_strategy.replace(/_/g, " ") : "\u2014"}</b>. Attempts so far: ${c.attempt_count} / ${c._policy_max || 3}. Will stop on payment success or maximum attempts reached.</p>
+        <h4>Recommended plan</h4>
+        <p>Strategy: <b>${c.recommended_strategy ? c.recommended_strategy.replace(/_/g, " ") : "\u2013"}</b>. Attempts so far: <b>${c.attempt_count} / ${c._policy_max || 3}</b>. Will stop on payment success or maximum attempts reached.</p>
       </div>
 
-      ${c.status === "RECOVERED" ? `<div class="result-banner recovered">\ud83d\udcb0 ${fmtMoney(c.amount_recovered, c.currency)} RECOVERED \u2014 stop reason: ${c.stop_reason}</div>` : ""}
-      ${c.status === "ESCALATED" ? `<div class="result-banner escalated">\u26a0 ESCALATED TO HUMAN \u2014 ${escapeHtml(c.escalation_reason || "")}
+      ${c.status === "RECOVERED" ? `<div class="result-banner recovered">${icon("money")} <b>${fmtMoney(c.amount_recovered, c.currency)} recovered.</b> Stop reason: ${c.stop_reason}</div>` : ""}
+      ${c.status === "ESCALATED" ? `<div class="result-banner escalated">${icon("warning")} <b>Escalated to human review.</b> ${escapeHtml(c.escalation_reason || "")}
           <div style="margin-left:auto; display:flex; gap:8px;">
             <button class="btn-primary btn-sm" id="approveBtn">Approve</button>
             <button class="btn-ghost btn-sm" id="rejectBtn">Reject / Close</button>
           </div>
         </div>` : ""}
-      ${c.status === "STOPPED" ? `<div class="result-banner stopped">\ud83d\uded1 STOPPED \u2014 reason: ${c.stop_reason}</div>` : ""}
+      ${c.status === "STOPPED" ? `<div class="result-banner stopped">${icon("stop")} <b>Stopped.</b> Reason: ${c.stop_reason}</div>` : ""}
       ${["OPEN", "ACTION_READY", "ANALYZING"].includes(c.status) ? `<div style="margin-top:14px; display:flex; gap:8px;">
           <button class="btn-primary btn-sm" id="analyzeBtn">Analyze</button>
           <button class="btn-ghost btn-sm" id="executeBtn">Execute next action</button>
-          <button class="btn-ghost btn-sm" id="sendLinkBtn">\ud83d\udd17 Send payment link</button>
-          <button class="btn-ghost btn-sm" id="checkoutBtn">\ud83d\udcb3 Pay with Razorpay Checkout</button>
+          <button class="btn-ghost btn-sm" id="sendLinkBtn"><span class="btn-ico">${icon("link")}</span><span class="btn-label">Send payment link</span></button>
+          <button class="btn-ghost btn-sm" id="checkoutBtn"><span class="btn-ico">${icon("card")}</span><span class="btn-label">Pay with Razorpay Checkout</span></button>
         </div>` : ""}
-      ${!["OPEN", "ACTION_READY", "ANALYZING", "RECOVERED"].includes(c.status) ? `<div style="margin-top:14px;">
-          <button class="btn-ghost btn-sm" id="sendLinkBtn">\ud83d\udd17 Send payment link</button>
-          <button class="btn-ghost btn-sm" id="checkoutBtn">\ud83d\udcb3 Pay with Razorpay Checkout</button>
+      ${!["OPEN", "ACTION_READY", "ANALYZING", "RECOVERED"].includes(c.status) ? `<div style="margin-top:14px; display:flex; gap:8px;">
+          <button class="btn-ghost btn-sm" id="sendLinkBtn"><span class="btn-ico">${icon("link")}</span><span class="btn-label">Send payment link</span></button>
+          <button class="btn-ghost btn-sm" id="checkoutBtn"><span class="btn-ico">${icon("card")}</span><span class="btn-label">Pay with Razorpay Checkout</span></button>
         </div>` : ""}
     </div>
 
     <div class="two-col" style="margin-top:18px;">
       <div class="card">
-        <div class="section-title">Agent Timeline</div>
+        <div class="section-title">Agent timeline</div>
         <div class="timeline">
           ${c.audit_trail.map(e => `
             <div class="tl-item ${e.action === 'recovered' ? 'recovered' : e.action === 'escalated' ? 'escalated' : ''}">
@@ -515,17 +586,17 @@ async function openCaseDetail(id) {
       </div>
       <div>
         <div class="card" style="margin-bottom:16px;">
-          <div class="section-title">Customer Context</div>
+          <div class="section-title">Customer context</div>
           ${healthScoreBadge(c.customer.health_score)}
           <div class="kv" style="margin-top:12px;">
-            <div><span>Name</span>${escapeHtml(c.customer.name)}</div>
+            <div><span>Name</span><b>${escapeHtml(c.customer.name)}</b></div>
             <div><span>Lifetime value</span>${fmtMoney(c.customer.lifetime_value)}</div>
             <div><span>Risk profile</span>${c.customer.risk_profile}</div>
-            <div><span>Company</span>${escapeHtml(c.customer.company || "\u2014")}</div>
+            <div><span>Company</span>${escapeHtml(c.customer.company || "\u2013")}</div>
           </div>
         </div>
         <div class="card">
-          <div class="section-title">Policy Applied</div>
+          <div class="section-title">Policy applied</div>
           <div class="kv">
             <div><span>Max attempts</span>${c.policy.max_attempts}</div>
             <div><span>Max workflow days</span>${c.policy.max_workflow_days}</div>
@@ -554,7 +625,7 @@ async function openCaseDetail(id) {
   caseAction("#rejectBtn", "/reject");
   $("#sendLinkBtn")?.addEventListener("click", async () => {
     const btn = $("#sendLinkBtn");
-    btn.disabled = true; btn.textContent = "Sending\u2026";
+    setBtnBusy(btn, true, "Sending\u2026");
     try {
       const result = await api(`/recovery-cases/${id}/send-payment-link`, { method: "POST" });
       const failReason = result.error?.description || result.error?.reason || "generation failed";
@@ -564,7 +635,7 @@ async function openCaseDetail(id) {
       openCaseDetail(id);
     } catch (e) {
       toast("Failed to send payment link: " + e.message);
-      btn.disabled = false; btn.textContent = "\ud83d\udd17 Send payment link";
+      setBtnBusy(btn, false);
     }
   });
   $("#checkoutBtn")?.addEventListener("click", async () => {
@@ -573,7 +644,7 @@ async function openCaseDetail(id) {
       return;
     }
     const btn = $("#checkoutBtn");
-    btn.disabled = true; btn.textContent = "Opening checkout\u2026";
+    setBtnBusy(btn, true, "Opening checkout\u2026");
     try {
       const order = await api("/create-order", {
         method: "POST",
@@ -598,7 +669,7 @@ async function openCaseDetail(id) {
                 razorpay_signature: resp.razorpay_signature,
               }),
             });
-            toast("Payment verified \u2014 signature valid");
+            toast("Payment verified. Signature valid.");
             openCaseDetail(id);
           } catch (e) {
             toast("Payment signature verification failed: " + e.message);
@@ -606,36 +677,48 @@ async function openCaseDetail(id) {
         },
         modal: {
           ondismiss: () => {
-            toast("Checkout closed \u2014 payment not completed");
-            btn.disabled = false; btn.textContent = "\ud83d\udcb3 Pay with Razorpay Checkout";
+            toast("Checkout closed. Payment not completed.");
+            setBtnBusy(btn, false);
           },
         },
       });
       rzp.on("payment.failed", (resp) => {
         toast("Payment failed: " + (resp.error?.description || resp.error?.reason || "unknown error"));
-        btn.disabled = false; btn.textContent = "\ud83d\udcb3 Pay with Razorpay Checkout";
+        setBtnBusy(btn, false);
       });
       rzp.open();
-      btn.disabled = false; btn.textContent = "\ud83d\udcb3 Pay with Razorpay Checkout";
+      setBtnBusy(btn, false);
     } catch (e) {
       toast("Failed to create order: " + e.message);
-      btn.disabled = false; btn.textContent = "\ud83d\udcb3 Pay with Razorpay Checkout";
+      setBtnBusy(btn, false);
     }
   });
 }
 
+const HEALTH_COLORS = { excellent: "var(--green)", good: "var(--accent)", fair: "var(--amber)", "at-risk": "var(--red)", unknown: "var(--text-faint)" };
+
 function healthScoreBadge(health) {
   if (!health) return "";
-  const colors = { excellent: "var(--green)", good: "var(--accent)", fair: "var(--amber)", "at-risk": "var(--red)", unknown: "var(--text-faint)" };
-  const color = colors[health.band] || "var(--text-faint)";
+  const color = HEALTH_COLORS[health.band] || "var(--text-faint)";
   return `
     <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--panel-2); border-radius:10px; border:1px solid var(--border-soft);">
       <div style="width:44px; height:44px; border-radius:50%; border:3px solid ${color}; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-weight:800; font-size:13px; color:${color}; flex-shrink:0;">${health.score}</div>
       <div>
-        <div style="font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:${color}; font-weight:700;">${health.band.replace(/-/g," ")} \u2014 Recovery Health Score</div>
-        <div style="font-size:12px; color:var(--text-dim); margin-top:2px;">${escapeHtml(health.reason)}</div>
+        <div class="hint" style="color:${color}; font-weight:700; margin-top:0;">Recovery health score</div>
+        <div style="font-size:12.5px; margin-top:2px;"><b style="color:${color}; text-transform:capitalize;">${health.band.replace(/-/g," ")}.</b> <span style="color:var(--text-dim);">${escapeHtml(health.reason)}</span></div>
       </div>
     </div>`;
+}
+
+// Compact badge used in table rows so recovery cases can be triaged by how
+// likely the customer is to self-resolve without agent intervention (see
+// prioritize_cases on the backend, which weighs this into case ordering).
+function healthPill(health) {
+  if (!health) return `<span class="hint">\u2013</span>`;
+  const color = HEALTH_COLORS[health.band] || "var(--text-faint)";
+  return `<span class="health-pill" title="${escapeHtml(health.reason)}" style="color:${color}; border-color:${color};">
+    <span class="health-dot" style="background:${color};"></span>${health.score}
+  </span>`;
 }
 
 // ---------------------------------------------------------------- Activity
@@ -649,7 +732,7 @@ async function renderActivity(root) {
 
 // ---------------------------------------------------------------- Escalations
 async function renderEscalations(root) {
-  const cases = await api("/recovery-cases?status=ESCALATED");
+  const cases = await api("/recovery-cases?status=ESCALATED&prioritized=true");
   const totalAtRisk = cases.reduce((s, c) => s + c.amount_at_risk, 0);
   root.innerHTML = `
     <div class="card reveal" style="margin-bottom:18px;">
@@ -678,7 +761,7 @@ async function renderAnalytics(root) {
       </div>
     </div>
     <div class="card reveal" style="margin-top:18px; animation-delay:.1s;">
-      <div class="section-title">Recovery Policy Optimizer <small>statistical ranking, not ML \u2014 which strategies actually recover money</small></div>
+      <div class="section-title">Recovery Policy Optimizer <small>statistical ranking, not ML. Shows which strategies actually recover money</small></div>
       ${strategyPerformanceTable(a.strategy_performance)}
     </div>
   `;
@@ -688,17 +771,17 @@ async function renderAnalytics(root) {
     data: {
       labels: a.by_segment.map(s => s.segment),
       datasets: [
-        { label: "Recovered", data: a.by_segment.map(s => s.recovered), backgroundColor: "#3ddc97", borderRadius: 6 },
-        { label: "At risk", data: a.by_segment.map(s => s.at_risk), backgroundColor: "#ff6b6b", borderRadius: 6 },
+        { label: "Recovered", data: a.by_segment.map(s => s.recovered), backgroundColor: cssVar("--green"), borderRadius: 6 },
+        { label: "At risk", data: a.by_segment.map(s => s.at_risk), backgroundColor: cssVar("--red"), borderRadius: 6 },
       ],
     },
-    options: { plugins: { legend: { labels: { color: "#9aa4b8" } } }, scales: { x: { ticks: { color: "#9aa4b8" }, grid: { display: false } }, y: { ticks: { color: "#9aa4b8" }, grid: { color: "#1b202c" } } } },
+    options: { plugins: { legend: { labels: { color: cssVar("--text-faint") } } }, scales: { x: { ticks: { color: cssVar("--text-faint") }, grid: { display: false } }, y: { ticks: { color: cssVar("--text-faint") }, grid: { color: cssVar("--border-soft") } } } },
   });
   const ctx2 = $("#chartAuto");
   new Chart(ctx2, {
     type: "doughnut",
-    data: { labels: ["Automated", "Human-escalated"], datasets: [{ data: [a.automated_vs_human.automated, a.automated_vs_human.human_escalated], backgroundColor: ["#3ddc97", "#ff6b6b"], borderWidth: 0 }] },
-    options: { plugins: { legend: { position: "bottom", labels: { color: "#9aa4b8" } } } },
+    data: { labels: ["Automated", "Human-escalated"], datasets: [{ data: [a.automated_vs_human.automated, a.automated_vs_human.human_escalated], backgroundColor: [cssVar("--green"), cssVar("--red")], borderWidth: 0 }] },
+    options: { plugins: { legend: { position: "bottom", labels: { color: cssVar("--text-faint") } } } },
   });
 }
 
@@ -727,7 +810,7 @@ async function renderPolicies(root) {
       <div style="margin-top:16px;">
         <button class="btn-primary btn-sm" id="savePolicyBtn">Save policy</button>
       </div>
-      <p class="hint" style="margin-top:16px;">The agent cannot retry indefinitely, create discounts, or continue past its stop conditions \u2014 these limits are enforced deterministically by the policy engine before any action executes. Changes here take effect on the next policy check.</p>
+      <p class="hint" style="margin-top:16px;">The agent cannot retry indefinitely, create discounts, or continue past its stop conditions. These limits are enforced deterministically by the policy engine before any action executes. Changes here take effect on the next policy check.</p>
     </div>
   `;
   $("#savePolicyBtn").addEventListener("click", async () => {
@@ -832,7 +915,7 @@ async function renderMerchantWebhooks(root) {
       const result = await api(`/merchants/${currentMerchantId}/webhooks`, {
         method: "POST", body: JSON.stringify({ url }),
       });
-      toast(`Webhook added — secret (save it, shown once): ${result.secret}`);
+      toast(`Webhook added. Secret (save it, shown once): ${result.secret}`);
       render();
     } catch (e) {
       toast("Failed to add webhook: " + e.message);
@@ -878,7 +961,7 @@ function showThinking(label) {
   card.appendChild(box);
 }
 
-// Full-page loading state shown while a view's data is in flight — the
+// Full-page loading state shown while a view's data is in flight. The
 // same visual language (orb + dots + shimmer) as showThinking() above,
 // scaled up. `rows` controls how many feed-row-shaped skeleton lines are
 // drawn, so it reads as "this many items are coming" rather than one
