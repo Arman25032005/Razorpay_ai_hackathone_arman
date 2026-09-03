@@ -72,13 +72,25 @@ def dashboard(merchant_id: str | None = None, db: Session = Depends(get_db)):
         return {
             "revenue_at_risk": 0, "revenue_recovered": 0, "recovery_rate": 0,
             "active_cases": 0, "escalations": 0, "by_strategy": [], "by_status": [],
-            "recent_actions": [],
+            "recent_actions": [], "total_action_cost": 0, "net_recovery_roi": 0, "roi_multiple": None,
         }
     at_risk = sum(c.amount_at_risk for c in cases if c.status not in ("RECOVERED",))
     recovered = sum(c.amount_recovered for c in cases)
     analyzed = sum(c.amount_at_risk for c in cases)
     active = len([c for c in cases if c.status in ("OPEN", "ANALYZING", "ACTION_READY", "EXECUTING")])
     escalations = len([c for c in cases if c.status == "ESCALATED"])
+
+    # Recovery ROI: net of the actual operational cost of every action taken
+    # (message sends, retry attempts, escalations) — not just gross revenue
+    # recovered. Every action has a cost whether or not it worked, so this
+    # sums over ALL actions on these cases, not just the ones that succeeded.
+    from app.policies.expected_value import ACTION_COST_BY_TYPE
+    case_ids = [c.id for c in cases]
+    actions = (db.query(RecoveryAction.action_type, func.count(RecoveryAction.id))
+               .filter(RecoveryAction.case_id.in_(case_ids))
+               .group_by(RecoveryAction.action_type).all()) if case_ids else []
+    total_action_cost = sum(ACTION_COST_BY_TYPE.get(action_type, 1.0) * count for action_type, count in actions)
+    net_roi = recovered - total_action_cost
 
     by_strategy = {}
     for c in cases:
@@ -110,6 +122,9 @@ def dashboard(merchant_id: str | None = None, db: Session = Depends(get_db)):
         "active_cases": active,
         "escalations": escalations,
         "total_cases": len(cases),
+        "total_action_cost": round(total_action_cost, 2),
+        "net_recovery_roi": round(net_roi, 2),
+        "roi_multiple": round(recovered / total_action_cost, 1) if total_action_cost else None,
         "by_strategy": by_strategy_list,
         "by_status": by_status_list,
         "recent_actions": recent_list,
@@ -541,6 +556,79 @@ def list_merchants(db: Session = Depends(get_db)):
             "customer_count": customer_count, "case_count": case_count,
         })
     return result
+
+
+# ---------------------------------------------------------- outbound webhooks
+VALID_MERCHANT_EVENT_TYPES = {"case.opened", "case.recovered", "case.escalated", "case.stopped"}
+
+
+@app.get("/api/merchants/{merchant_id}/webhooks")
+def list_merchant_webhooks(merchant_id: str, db: Session = Depends(get_db)):
+    """Lists this merchant's outbound webhook subscriptions. Secrets are
+    never returned after creation — a subscription's HMAC key is shown once,
+    at creation time, same as most webhook providers (Stripe, Razorpay
+    included) handle it."""
+    subs = (db.query(models.MerchantWebhookSubscription)
+            .filter(models.MerchantWebhookSubscription.merchant_id == merchant_id)
+            .order_by(models.MerchantWebhookSubscription.created_at.desc()).all())
+    return [{
+        "id": s.id, "url": s.url, "event_types": s.event_types, "active": s.active,
+        "created_at": s.created_at.isoformat(),
+    } for s in subs]
+
+
+@app.post("/api/merchants/{merchant_id}/webhooks", dependencies=[Depends(require_api_key)])
+def create_merchant_webhook(merchant_id: str, payload: dict, db: Session = Depends(get_db)):
+    merchant = db.query(models.Merchant).filter(models.Merchant.id == merchant_id).first()
+    if not merchant:
+        raise HTTPException(404, "Merchant not found")
+    url = payload.get("url")
+    if not url or not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(400, "A valid http(s) 'url' is required")
+    event_types = payload.get("event_types") or list(VALID_MERCHANT_EVENT_TYPES)
+    invalid = set(event_types) - VALID_MERCHANT_EVENT_TYPES
+    if invalid:
+        raise HTTPException(400, f"Unknown event_types: {sorted(invalid)}. Valid: {sorted(VALID_MERCHANT_EVENT_TYPES)}")
+
+    from app.outbound_webhooks import generate_secret
+    secret = generate_secret()
+    sub = models.MerchantWebhookSubscription(
+        merchant_id=merchant_id, url=url, secret=secret, event_types=event_types)
+    db.add(sub)
+    db.commit()
+    db.refresh(sub)
+    return {
+        "id": sub.id, "url": sub.url, "event_types": sub.event_types, "active": sub.active,
+        "secret": secret,  # shown once — store it now, it won't be returned again
+    }
+
+
+@app.delete("/api/merchants/{merchant_id}/webhooks/{webhook_id}", dependencies=[Depends(require_api_key)])
+def delete_merchant_webhook(merchant_id: str, webhook_id: str, db: Session = Depends(get_db)):
+    sub = (db.query(models.MerchantWebhookSubscription)
+           .filter(models.MerchantWebhookSubscription.id == webhook_id,
+                    models.MerchantWebhookSubscription.merchant_id == merchant_id).first())
+    if not sub:
+        raise HTTPException(404, "Webhook subscription not found")
+    db.delete(sub)
+    db.commit()
+    return {"status": "deleted"}
+
+
+@app.get("/api/merchants/{merchant_id}/webhooks/{webhook_id}/deliveries")
+def list_webhook_deliveries(merchant_id: str, webhook_id: str, db: Session = Depends(get_db)):
+    sub = (db.query(models.MerchantWebhookSubscription)
+           .filter(models.MerchantWebhookSubscription.id == webhook_id,
+                    models.MerchantWebhookSubscription.merchant_id == merchant_id).first())
+    if not sub:
+        raise HTTPException(404, "Webhook subscription not found")
+    deliveries = (db.query(models.WebhookDelivery)
+                  .filter(models.WebhookDelivery.subscription_id == webhook_id)
+                  .order_by(models.WebhookDelivery.attempted_at.desc()).limit(50).all())
+    return [{
+        "id": d.id, "event_type": d.event_type, "case_id": d.case_id, "success": d.success,
+        "status_code": d.status_code, "error": d.error, "attempted_at": d.attempted_at.isoformat(),
+    } for d in deliveries]
 
 
 # ------------------------------------------------------------------ customers

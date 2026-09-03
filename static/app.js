@@ -211,6 +211,11 @@ async function renderDashboard(root) {
         <div class="metric-label">Escalations</div>
         <div class="metric-value amber">${d.escalations}</div>
       </div>
+      <div class="card metric-card">
+        <div class="metric-label">Net Recovery ROI</div>
+        <div class="metric-value ${d.net_recovery_roi >= 0 ? 'green' : 'amber'}">${fmtMoney(d.net_recovery_roi)}</div>
+        <div class="metric-sub">${fmtMoney(d.revenue_recovered)} recovered − ${fmtMoney(d.total_action_cost)} action cost${d.roi_multiple != null ? ` · ${d.roi_multiple}× return` : ""}</div>
+      </div>
     </div>
     <div class="two-col">
       <div class="card">
@@ -716,6 +721,72 @@ async function renderIntegrations(root) {
     if (val) localStorage.setItem("recoverai_api_key", val);
     else localStorage.removeItem("recoverai_api_key");
     toast(val ? "API key saved" : "API key cleared");
+  });
+
+  await renderMerchantWebhooks(root);
+}
+
+// ---------------------------------------------------------- Outbound webhooks
+async function renderMerchantWebhooks(root) {
+  const wrap = document.createElement("div");
+  wrap.className = "card";
+  wrap.style.cssText = "margin-top:16px; max-width:640px;";
+
+  if (!currentMerchantId) {
+    wrap.innerHTML = `<div style="font-weight:600; margin-bottom:8px;">Outbound Webhooks</div>
+      <div class="hint">Select a specific merchant from the switcher above to manage webhook subscriptions — they let that merchant's own systems (CRM, finance, alerting) receive <code>case.opened</code> / <code>case.recovered</code> / <code>case.escalated</code> / <code>case.stopped</code> events, signed with HMAC-SHA256, the same scheme this app requires of Razorpay's inbound webhooks.</div>`;
+    root.appendChild(wrap);
+    return;
+  }
+
+  let subs = [];
+  try {
+    subs = await api(`/merchants/${currentMerchantId}/webhooks`);
+  } catch (e) { /* leave empty */ }
+
+  wrap.innerHTML = `
+    <div style="font-weight:600; margin-bottom:8px;">Outbound Webhooks <span class="hint" style="text-transform:none;">for this merchant</span></div>
+    <div class="hint" style="margin-bottom:10px;">Recovery events (case opened/recovered/escalated/stopped) are POSTed here as JSON, signed with <code>X-RecoveryOS-Signature</code> (HMAC-SHA256 of the body using the secret shown at creation).</div>
+    ${subs.length ? `<table style="margin-bottom:12px;">
+      <thead><tr><th>URL</th><th>Events</th><th>Status</th><th></th></tr></thead>
+      <tbody>${subs.map(s => `<tr>
+        <td style="font-family:var(--mono); font-size:12px;">${escapeHtml(s.url)}</td>
+        <td style="font-size:12px;">${s.event_types.map(e => e.replace('case.', '')).join(', ')}</td>
+        <td><span class="dot ${s.active ? 'on' : 'off'}"></span>${s.active ? 'Active' : 'Inactive'}</td>
+        <td><button class="btn-ghost btn-sm" data-delete-webhook="${s.id}">Delete</button></td>
+      </tr>`).join('')}</tbody>
+    </table>` : '<div class="hint" style="margin-bottom:12px;">No webhook subscriptions yet for this merchant.</div>'}
+    <div style="display:flex; gap:8px;">
+      <input id="webhook-url-input" type="url" placeholder="https://your-system.example.com/hooks/recoveryos" style="flex:1;" />
+      <button id="add-webhook-btn">Add subscription</button>
+    </div>
+  `;
+  root.appendChild(wrap);
+
+  $$("[data-delete-webhook]", wrap).forEach(btn => {
+    btn.addEventListener("click", async () => {
+      try {
+        await api(`/merchants/${currentMerchantId}/webhooks/${btn.dataset.deleteWebhook}`, { method: "DELETE" });
+        toast("Webhook subscription deleted");
+        render();
+      } catch (e) {
+        toast("Failed to delete: " + e.message);
+      }
+    });
+  });
+
+  $("#add-webhook-btn", wrap).addEventListener("click", async () => {
+    const url = $("#webhook-url-input", wrap).value.trim();
+    if (!url) { toast("Enter a URL first"); return; }
+    try {
+      const result = await api(`/merchants/${currentMerchantId}/webhooks`, {
+        method: "POST", body: JSON.stringify({ url }),
+      });
+      toast(`Webhook added — secret (save it, shown once): ${result.secret}`);
+      render();
+    } catch (e) {
+      toast("Failed to add webhook: " + e.message);
+    }
   });
 }
 

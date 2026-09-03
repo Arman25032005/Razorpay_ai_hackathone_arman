@@ -60,6 +60,24 @@ set — see `docs/RAZORPAY_INTEGRATION.md` section 5.
 GET  /api/merchants   list with live per-merchant customer/case counts
 ```
 
+## Outbound merchant webhooks
+
+Lets a merchant's own systems subscribe to recovery events instead of
+polling. Payloads are POSTed as JSON, signed with
+`X-RecoveryOS-Signature: HMAC-SHA256(secret, body)` — the same scheme
+`app/security.py` requires of Razorpay's inbound webhooks to us. See
+`app/outbound_webhooks.py`.
+
+```
+GET    /api/merchants/{merchant_id}/webhooks                       list subscriptions (secret never re-shown)
+POST   /api/merchants/{merchant_id}/webhooks                   🔒  create — {url, event_types?} -> {id, secret} (shown once)
+DELETE /api/merchants/{merchant_id}/webhooks/{webhook_id}      🔒  remove a subscription
+GET    /api/merchants/{merchant_id}/webhooks/{webhook_id}/deliveries   last 50 delivery attempts (success/status/error)
+```
+
+`event_types` (default: all four) is any subset of `case.opened`,
+`case.recovered`, `case.escalated`, `case.stopped`.
+
 ## Customers, invoices, payments
 
 ```

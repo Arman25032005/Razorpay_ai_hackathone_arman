@@ -29,24 +29,39 @@ This is the section spec section 54 ("do not cheat — never claim a live
 integration when only mock integration exists") requires, made explicit
 and impossible to miss.
 
-### Built, real, tested (see the test suite — 58 passing tests)
+### Built, real, tested (see the test suite — 73 passing tests)
 
 - Full agent loop: detect -> diagnose -> decide -> policy-check -> act ->
   verify -> measure -> stop/escalate
 - Deterministic, editable policy engine (bounded autonomy)
-- Real Razorpay integration: Payment Links API (verified request shape),
-  payment status API, webhook ingestion (verified against Razorpay's
-  actual documented payload), HMAC signature verification, idempotent
-  webhook redelivery handling — see `docs/RAZORPAY_INTEGRATION.md` for the
-  exact endpoint-by-endpoint breakdown of what's real vs. what's a
-  documented mock fallback
+- Real Razorpay integration: Payment Links API (request shape verified AND
+  a live test-mode call executed against `api.razorpay.com`), payment
+  status API, webhook ingestion (verified against Razorpay's actual
+  documented payload), HMAC signature verification, idempotent webhook
+  redelivery handling — see `docs/RAZORPAY_INTEGRATION.md` for the exact
+  endpoint-by-endpoint breakdown of what's real vs. what's a documented
+  mock fallback
+- Decline-code-driven diagnosis (`app/decline_codes.py`): failure
+  strategy selection is keyed off Razorpay's actual ~90-entry documented
+  `error.reason` taxonomy (card expired vs. issuer-declined vs. risk/
+  compliance decline vs. transient gateway failure, etc.), not a single
+  generic "payment failed" bucket — including a hard rule that risk/
+  compliance declines are never auto-retried, regardless of customer
+  history
 - Explicit `PaymentStateMachine` handling out-of-order/duplicate webhook
   events and Razorpay's documented `failed -> captured` sequence
 - A real, honestly-evaluated logistic regression recovery-probability
   model — temporal train/val/test split, real precision/recall/ROC-AUC/
   calibration metrics computed from actual execution (`ml/train.py`,
-  `ml/evaluate.py`), with per-prediction explainability
-- Cost-sensitive expected-value decision framework
+  `ml/evaluate.py`), with per-prediction explainability surfaced in the
+  case-detail UI
+- Cost-sensitive expected-value decision framework, plus a portfolio-level
+  Net Recovery ROI metric on the dashboard (gross revenue recovered minus
+  the real operational cost of every action taken, successful or not)
+- Outbound merchant webhooks (`app/outbound_webhooks.py`): a merchant's
+  own systems can subscribe to case.opened/recovered/escalated/stopped
+  events, HMAC-SHA256-signed with the same scheme this app requires of
+  Razorpay's inbound webhooks
 - Lightweight multi-tenant isolation (Merchant -> Customer -> everything
   downstream), verified with a live cross-tenant leak test
 - Full audit trail, human review queue, CSV export, live dashboard
@@ -85,18 +100,21 @@ and impossible to miss.
 - **Full RBAC/JWT auth, CI/CD pipeline, OpenTelemetry/Prometheus.**
   Lightweight API-key auth exists (`app/security.py`); the rest are
   documented as next steps in `docs/SECURITY.md`, not implemented.
-- **Live Razorpay test-mode round-trip.** The integration code is built to
-  Razorpay's real documented API shape and verified for request-shape
-  correctness, but has not been executed against `api.razorpay.com` with
-  real test-mode credentials in this environment (see
-  `docs/RAZORPAY_INTEGRATION.md` section 8 for the precise "verified vs.
+- ~~**Live Razorpay test-mode round-trip.**~~ Done — verified with real
+  test-mode credentials: `RazorpayPaymentProvider.create_payment_link()`
+  executed against `api.razorpay.com` and returned a genuine payment link
+  (`https://rzp.io/rzp/...`) with a real `payment_link_id`. Still open: a
+  full round-trip including a completed test-mode payment and inbound
+  webhook delivery with a Razorpay-issued signature (see
+  `docs/RAZORPAY_INTEGRATION.md` section 8 for the current "verified vs.
   not yet verified" breakdown).
 
 ## Roadmap, in priority order
 
-1. Wire real Razorpay test-mode credentials and confirm the live
-   round-trip (Payment Links creation, webhook delivery, signature
-   verification against a Razorpay-issued signature).
+1. ~~Wire real Razorpay test-mode credentials and confirm the live
+   round-trip~~ — Payment Links creation is now verified live. Remaining:
+   drive a real test-mode payment through to completion and confirm
+   inbound webhook delivery with a Razorpay-issued signature end to end.
 2. Retrain the recovery-probability model on real outcome data as it
    accumulates from actual recovery cases, replacing the synthetic
    dataset.

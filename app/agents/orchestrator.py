@@ -24,6 +24,7 @@ from app.policies.engine import check_policy, evaluate_stop_condition, get_activ
 from app.providers.payment import payment_provider
 from app.providers.communication import communication_provider, render_message
 from app.payment_state_machine import PaymentState, verify_before_action
+from app.outbound_webhooks import dispatch_event
 
 ACTION_TYPE_BY_STRATEGY = {
     "immediate_payment_retry": "payment_retry",
@@ -73,6 +74,18 @@ def _log(db: Session, case: RecoveryCase, actor_type: str, action: str, descript
     db.add(ev)
     db.flush()
     return ev
+
+
+def _notify_merchant(db: Session, case: RecoveryCase, event_type: str):
+    """Fires an outbound webhook to any merchant systems subscribed to this
+    case's merchant (see app.outbound_webhooks). Best-effort — never raises,
+    so an unreachable merchant endpoint can't affect the recovery workflow."""
+    merchant_id = case.customer.merchant_id if case.customer else None
+    dispatch_event(db, merchant_id, event_type, case.id, {
+        "status": case.status, "amount_at_risk": case.amount_at_risk, "currency": case.currency,
+        "amount_recovered": case.amount_recovered, "root_cause": case.root_cause,
+        "recommended_strategy": case.recommended_strategy, "stop_reason": case.stop_reason,
+    })
 
 
 def _apply_strategy_optimizer(db: Session, decision) -> str:
@@ -131,6 +144,7 @@ def create_case(db: Session, customer: Customer, source_type: str, source_id: st
          f"Revenue-at-risk case opened for {currency} {amount:,.0f} ({source_type})")
     db.commit()
     db.refresh(case)
+    _notify_merchant(db, case, "case.opened")
     return case
 
 
@@ -229,6 +243,7 @@ def execute_next_action(db: Session, case: RecoveryCase) -> RecoveryCase:
                      f"Workflow stopped. Reason: {case.stop_reason}")
                 db.commit()
                 db.refresh(case)
+                _notify_merchant(db, case, "case.recovered" if already_recovered else "case.stopped")
                 return case
 
     strategy = case.recommended_strategy or "human_escalation"
@@ -249,6 +264,7 @@ def execute_next_action(db: Session, case: RecoveryCase) -> RecoveryCase:
         _log(db, case, "SYSTEM", "escalated", f"Escalated to human: {policy_result.reason}")
         db.commit()
         db.refresh(case)
+        _notify_merchant(db, case, "case.escalated")
         return case
 
     case.status = "EXECUTING"
@@ -319,6 +335,12 @@ def execute_next_action(db: Session, case: RecoveryCase) -> RecoveryCase:
 
     db.commit()
     db.refresh(case)
+    if case.status == "RECOVERED":
+        _notify_merchant(db, case, "case.recovered")
+    elif case.status == "ESCALATED":
+        _notify_merchant(db, case, "case.escalated")
+    elif case.status == "STOPPED":
+        _notify_merchant(db, case, "case.stopped")
     return case
 
 

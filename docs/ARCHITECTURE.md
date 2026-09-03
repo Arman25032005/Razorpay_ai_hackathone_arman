@@ -122,6 +122,6 @@ ml/
   train.py                     model training + honest evaluation
   evaluate.py                  reproducible re-evaluation without retraining
 static/                        frontend (HTML/CSS/JS)
-tests/                          58 tests covering policy, agent, ML, webhooks, tenancy, security
+tests/                          73 tests covering policy, agent, ML, webhooks, tenancy, security
 docs/                           this document and its siblings
 ```

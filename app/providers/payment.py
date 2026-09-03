@@ -18,6 +18,9 @@ RETRY_SUCCESS_PROBABILITY = {
     "invalid_payment_method": 0.05,
     "bank_decline": 0.30,
     "authentication_failure": 0.40,
+    "customer_hesitation": 0.50,          # payment_cancelled: often just needs a nudge
+    "transaction_limit_exceeded": 0.35,   # clears after a cooldown, not instantly
+    "risk_or_compliance_decline": 0.0,    # never auto-retried — see ai_service escalation
     "unknown": 0.15,
 }
 

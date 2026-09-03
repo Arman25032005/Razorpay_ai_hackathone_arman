@@ -19,12 +19,20 @@ from app.providers.communication import MockCommunicationProvider
 fake = Faker()
 
 FAILURE_REASONS = (
-    ["temporary_failure"] * 45 +
-    ["card_expired"] * 20 +
-    ["auth_failed"] * 15 +
+    ["temporary_failure"] * 30 +
+    ["card_expired"] * 18 +
+    ["auth_failed"] * 12 +
     ["insufficient_funds"] * 10 +
     ["network_timeout"] * 5 +
-    ["invalid_method"] * 5
+    ["invalid_method"] * 5 +
+    # decline-code-driven buckets (see app/decline_codes.py) — real Razorpay
+    # error.reason categories the simulation exercises so the demo actually
+    # shows the full range of recovery strategies, not just the original six.
+    ["bank_declined"] * 8 +
+    ["card_declined_by_issuer"] * 5 +
+    ["payment_cancelled"] * 4 +
+    ["limit_exceeded"] * 2 +
+    ["risk_declined"] * 1
 )
 
 NAMED_HERO_SCENARIOS = [

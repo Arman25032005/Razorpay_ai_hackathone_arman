@@ -198,6 +198,37 @@ class WebhookEvent(Base):
     received_at = Column(DateTime, default=utcnow)
 
 
+class MerchantWebhookSubscription(Base):
+    """A merchant-registered endpoint that receives outbound recovery
+    events (case.opened / case.recovered / case.escalated) — the same
+    pattern this app itself consumes from Razorpay, so a merchant's own
+    systems (CRM, finance, alerting) can react to recovery activity without
+    polling the dashboard."""
+    __tablename__ = "merchant_webhook_subscriptions"
+    id = Column(String, primary_key=True, default=lambda: gen_id("WHSUB"))
+    merchant_id = Column(String, ForeignKey("merchants.id"), nullable=False, index=True)
+    url = Column(String, nullable=False)
+    secret = Column(String, nullable=False)  # HMAC-SHA256 signing key for delivered payloads
+    event_types = Column(JSON, default=lambda: ["case.opened", "case.recovered", "case.escalated"])
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class WebhookDelivery(Base):
+    """Delivery log for outbound merchant webhooks — lets a merchant (or us,
+    debugging on their behalf) see what was sent, when, and whether it
+    succeeded, without needing a queue/retry infrastructure at this scale."""
+    __tablename__ = "webhook_deliveries"
+    id = Column(String, primary_key=True, default=lambda: gen_id("WHDEL"))
+    subscription_id = Column(String, ForeignKey("merchant_webhook_subscriptions.id"), nullable=False, index=True)
+    event_type = Column(String)
+    case_id = Column(String, nullable=True)
+    success = Column(Boolean, default=False)
+    status_code = Column(Integer, nullable=True)
+    error = Column(String, nullable=True)
+    attempted_at = Column(DateTime, default=utcnow)
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
     id = Column(String, primary_key=True, default=lambda: gen_id("AUD"))

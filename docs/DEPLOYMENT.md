@@ -65,7 +65,7 @@ demo mode — the app runs fully functional with zero configuration.
 
 Spec section 44 asks for GitHub Actions (lint/test/build/security checks).
 **Not implemented in this build** — every verification in this project
-(58 passing tests, live smoke tests) was run manually during development,
+(73 passing tests, live smoke tests) was run manually during development,
 not automated on push/PR. This is a real, acknowledged gap for a 3-day
 build, not a claimed feature. A minimal first version would be:
 
@@ -108,7 +108,7 @@ deployment step, unlike the spec's Next.js-on-Vercel assumption. See
 - [x] Mock environment works
 - [x] Demo mode works
 - [x] Dashboard works
-- [x] Tests pass (58/58)
+- [x] Tests pass (73/73)
 - [x] Docker works
 - [ ] CI — not implemented
 - [x] Secrets are not committed (`.gitignore` covers `.env`, `*.db`)

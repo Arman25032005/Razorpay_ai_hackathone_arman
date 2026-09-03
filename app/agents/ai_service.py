@@ -46,14 +46,23 @@ def _diagnose_payment_failure(customer_ctx: dict, failure_reason: str) -> Decisi
     failures = customer_ctx["previous_failures"]
     reliable = successes >= 5 and failures <= 1
 
+    # failure_reason buckets come from app.decline_codes.classify_decline —
+    # Razorpay's real documented error.reason taxonomy collapsed into a
+    # vocabulary the strategy layer can act on (see that module's docstring
+    # for the full reason -> bucket mapping and why each grouping exists).
     cause_map = {
         "card_expired": "expired_card",
         "insufficient_funds": "insufficient_funds",
         "auth_failed": "authentication_failure",
+        "otp_failed": "authentication_failure",
         "bank_declined": "bank_decline",
+        "card_declined_by_issuer": "bank_decline",
         "invalid_method": "invalid_payment_method",
         "network_timeout": "temporary_failure",
         "temporary_failure": "temporary_failure",
+        "payment_cancelled": "customer_hesitation",
+        "limit_exceeded": "transaction_limit_exceeded",
+        "risk_declined": "risk_or_compliance_decline",
     }
     root_cause = cause_map.get(failure_reason, "unknown")
     confidence = 0.94 if root_cause != "unknown" else 0.4
@@ -65,6 +74,11 @@ def _diagnose_payment_failure(customer_ctx: dict, failure_reason: str) -> Decisi
         "bank_decline": "delayed_retry",
         "invalid_payment_method": "payment_method_update",
         "temporary_failure": "immediate_payment_retry",
+        "customer_hesitation": "friendly_reminder",
+        "transaction_limit_exceeded": "delayed_retry",
+        # Never auto-retried: a risk/compliance decline stays a human call,
+        # regardless of how reliable this customer's history looks.
+        "risk_or_compliance_decline": "human_escalation",
         "unknown": "human_escalation",
     }
     # A viable second-choice strategy per root cause, so the strategy
@@ -77,6 +91,9 @@ def _diagnose_payment_failure(customer_ctx: dict, failure_reason: str) -> Decisi
         "bank_decline": "stronger_reminder",
         "invalid_payment_method": "payment_link",
         "temporary_failure": "delayed_retry",
+        "customer_hesitation": "payment_link",
+        "transaction_limit_exceeded": "friendly_reminder",
+        "risk_or_compliance_decline": None,
         "unknown": None,
     }
     strategy = strategy_by_cause[root_cause]
@@ -87,6 +104,9 @@ def _diagnose_payment_failure(customer_ctx: dict, failure_reason: str) -> Decisi
     if root_cause == "unknown" and not reliable:
         escalate = True
         reason = "AI could not determine root cause with sufficient confidence"
+    elif root_cause == "risk_or_compliance_decline":
+        escalate = True
+        reason = "Risk/compliance decline — never auto-retried, requires human review"
 
     summary = (
         f"Customer has {successes} successful payment(s) and {failures} prior failure(s), "
@@ -179,7 +199,8 @@ ALLOWED_ROOT_CAUSES = {
     "temporary_failure", "insufficient_funds", "expired_card", "invalid_payment_method",
     "bank_decline", "authentication_failure", "checkout_abandonment", "customer_hesitation",
     "subscription_churn_risk", "invoice_overdue", "likely_administrative_delay",
-    "repeated_late_payer", "broken_mandate", "unknown",
+    "repeated_late_payer", "broken_mandate", "transaction_limit_exceeded",
+    "risk_or_compliance_decline", "unknown",
 }
 ALLOWED_STRATEGIES = {
     "immediate_payment_retry", "delayed_retry", "payment_method_update", "friendly_reminder",

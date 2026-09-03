@@ -6,7 +6,7 @@
 ./venv/bin/python -m pytest tests/ -q
 ```
 
-**58 tests, all passing** on a fresh `pip install -r requirements.txt`,
+**73 tests, all passing** on a fresh `pip install -r requirements.txt`,
 verified repeatedly throughout this build rather than run once and trusted.
 
 ## Coverage by category (extracted directly from `tests/test_core.py`'s
@@ -52,7 +52,7 @@ every getter/formatter in the codebase.
 - **No load/performance test suite** beyond the manual 1,000-customer
   simulation timing check documented in `docs/ARCHITECTURE.md` and the
   README.
-- **No CI** — see `docs/DEPLOYMENT.md`'s honest gap section. All 58 tests
+- **No CI** — see `docs/DEPLOYMENT.md`'s honest gap section. All 73 tests
   have been run manually, repeatedly, but never on an automated
   push/PR trigger.
 - **ML tests validate the pipeline's mechanics and causal-structure

@@ -16,6 +16,21 @@ from app.agents import ai_service
 from app.agents.orchestrator import create_case, analyze_case, execute_next_action
 
 
+@pytest.fixture(autouse=True)
+def _force_deterministic_diagnosis(monkeypatch):
+    """This suite's assertions are written against the deterministic rule
+    engine in ai_service.py. If a real LLM_API_KEY happens to be present in
+    the environment (.env, loaded via app/__init__.py's load_dotenv() —
+    e.g. because this checkout is also configured for live-integration use
+    outside pytest), USE_LLM would silently flip to True and every
+    diagnosis test would depend on a live network call's judgment instead
+    of our own routing table — flaky, slow, and not what "58/73 tests,
+    offline and demo-safe" promises. Force the deterministic path for the
+    whole suite; tests that specifically want to exercise the LLM path
+    override this explicitly."""
+    monkeypatch.setattr(ai_service, "USE_LLM", False)
+
+
 @pytest.fixture()
 def db():
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
@@ -751,3 +766,257 @@ def test_expected_value_never_gates_execution():
     import inspect
     source = inspect.getsource(engine_module)
     assert "expected_value" not in source
+
+
+# ---------------------------------------------------------------- Decline-code classification tests
+def test_classify_decline_uses_authoritative_reason_first():
+    """A real Razorpay error.reason should classify precisely, even when
+    error_code/description would suggest something coarser or different."""
+    from app.decline_codes import classify_decline
+    assert classify_decline(reason="card_declined") == "card_declined_by_issuer"
+    assert classify_decline(reason="payment_cancelled") == "payment_cancelled"
+    assert classify_decline(reason="transaction_daily_limit_exceeded") == "limit_exceeded"
+    assert classify_decline(reason="payment_risk_check_failed") == "risk_declined"
+    assert classify_decline(reason="incorrect_otp") == "otp_failed"
+
+
+def test_classify_decline_falls_back_to_error_code_then_description():
+    from app.decline_codes import classify_decline
+    # unrecognized reason, but description carries a usable signal
+    assert classify_decline(reason="something_new", description="Card has expired") == "card_expired"
+    # no reason or description — falls back to the coarse error_code bucket
+    assert classify_decline(error_code="GATEWAY_ERROR") == "network_timeout"
+    # nothing recognizable at all
+    assert classify_decline() == "unrecognized_gateway_error"
+
+
+def test_non_retryable_buckets_exclude_expired_and_risk():
+    from app.decline_codes import is_retryable
+    assert is_retryable("insufficient_funds") is True
+    assert is_retryable("temporary_failure") is True
+    assert is_retryable("card_expired") is False
+    assert is_retryable("risk_declined") is False
+    assert is_retryable("card_declined_by_issuer") is False
+
+
+def test_risk_decline_always_escalates_regardless_of_customer_reliability(monkeypatch):
+    """A risk/compliance decline must never be auto-retried, even for an
+    otherwise perfectly reliable customer — this is a hard business rule,
+    not a confidence-based judgment call. Forces the deterministic rule
+    engine (USE_LLM off) so this asserts our own routing table, not
+    whatever a live LLM call happens to decide."""
+    monkeypatch.setattr(ai_service, "USE_LLM", False)
+    ctx = {"successful_payments": 50, "previous_failures": 0}
+    d = ai_service.diagnose("payment_failed", ctx, failure_reason="risk_declined")
+    assert d.root_cause == "risk_or_compliance_decline"
+    assert d.human_escalation_required is True
+    assert d.recommended_strategy == "human_escalation"
+
+
+def test_card_declined_by_issuer_routes_to_method_update_not_retry(monkeypatch):
+    """A card actively declined/blocked by the issuer should never be
+    routed to a same-card retry strategy — that would just fail again."""
+    monkeypatch.setattr(ai_service, "USE_LLM", False)
+    ctx = {"successful_payments": 5, "previous_failures": 0}
+    d = ai_service.diagnose("payment_failed", ctx, failure_reason="bank_declined")
+    assert d.recommended_strategy == "delayed_retry"
+    d2 = ai_service.diagnose("payment_failed", ctx, failure_reason="invalid_method")
+    assert d2.recommended_strategy != "immediate_payment_retry"
+
+
+def test_payment_cancelled_diagnoses_as_customer_hesitation(monkeypatch):
+    monkeypatch.setattr(ai_service, "USE_LLM", False)
+    ctx = {"successful_payments": 3, "previous_failures": 0}
+    d = ai_service.diagnose("payment_failed", ctx, failure_reason="payment_cancelled")
+    assert d.root_cause == "customer_hesitation"
+    assert d.recommended_strategy == "friendly_reminder"
+
+
+def test_limit_exceeded_diagnoses_with_delayed_retry(monkeypatch):
+    monkeypatch.setattr(ai_service, "USE_LLM", False)
+    ctx = {"successful_payments": 8, "previous_failures": 0}
+    d = ai_service.diagnose("payment_failed", ctx, failure_reason="limit_exceeded")
+    assert d.root_cause == "transaction_limit_exceeded"
+    assert d.recommended_strategy == "delayed_retry"
+
+
+def test_normalize_razorpay_payload_uses_authoritative_error_reason():
+    """When a real Razorpay payload carries error_reason (the authoritative
+    field), it must be preferred over description-keyword guessing."""
+    from app.webhooks import _normalize_razorpay_payload
+    payload = {
+        "entity": "event", "event": "payment.failed",
+        "payload": {"payment": {"entity": {
+            "id": "pay_reason_test", "amount": 10000, "currency": "INR",
+            "error_code": "GATEWAY_ERROR",  # would otherwise map to network_timeout
+            "error_reason": "card_declined",
+            "error_description": "Payment failed",
+        }}},
+    }
+    result = _normalize_razorpay_payload(payload)
+    assert result["failure_reason"] == "card_declined_by_issuer"
+
+
+# ---------------------------------------------------------------- Recovery ROI tests
+def test_dashboard_reports_net_recovery_roi(db, monkeypatch):
+    from app.providers import payment as payment_mod
+    monkeypatch.setattr(payment_mod, "RETRY_SUCCESS_PROBABILITY", {"temporary_failure": 1.0})
+    payment_mod.payment_provider = payment_mod.MockPaymentProvider()
+    monkeypatch.setattr("app.agents.orchestrator.payment_provider", payment_mod.payment_provider)
+
+    c = make_customer(db)
+    case = create_case(db, c, "payment_failed", "PAY-roi", 1000)
+    analyze_case(db, case, failure_reason="temporary_failure")
+    execute_next_action(db, case)
+    assert case.status == "RECOVERED"
+
+    from app.policies.expected_value import ACTION_COST_BY_TYPE
+    from app.main import dashboard as dashboard_endpoint
+
+    body = dashboard_endpoint(merchant_id=None, db=db)
+
+    expected_cost = ACTION_COST_BY_TYPE["payment_retry"]
+    assert body["total_action_cost"] == expected_cost
+    assert body["net_recovery_roi"] == round(1000 - expected_cost, 2)
+
+
+# ---------------------------------------------------------------- Outbound merchant webhooks tests
+def test_dispatch_event_signs_and_records_delivery(db, monkeypatch):
+    from app import outbound_webhooks
+    from app.models import Merchant, MerchantWebhookSubscription, WebhookDelivery
+
+    m = Merchant(name="Test Merchant")
+    db.add(m); db.commit(); db.refresh(m)
+    sub = MerchantWebhookSubscription(merchant_id=m.id, url="https://example.com/hook",
+                                       secret="topsecret", event_types=["case.recovered"])
+    db.add(sub); db.commit(); db.refresh(sub)
+
+    captured = {}
+
+    class FakeResponse:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake_urlopen(req, timeout=5):
+        captured["headers"] = dict(req.header_items())
+        captured["body"] = req.data
+        return FakeResponse()
+
+    monkeypatch.setattr(outbound_webhooks.urllib.request, "urlopen", fake_urlopen)
+    outbound_webhooks.dispatch_event(db, m.id, "case.recovered", "CASE-1", {"amount_recovered": 500})
+
+    sig_header = [v for k, v in captured["headers"].items() if k.lower() == "x-recoveryos-signature"][0]
+    expected_sig = outbound_webhooks.sign_payload(captured["body"], "topsecret")
+    assert sig_header == expected_sig
+
+    deliveries = db.query(WebhookDelivery).filter(WebhookDelivery.subscription_id == sub.id).all()
+    assert len(deliveries) == 1
+    assert deliveries[0].success is True
+    assert deliveries[0].event_type == "case.recovered"
+
+
+def test_dispatch_event_skips_subscription_not_matching_event_type(db, monkeypatch):
+    from app import outbound_webhooks
+    from app.models import Merchant, MerchantWebhookSubscription, WebhookDelivery
+
+    m = Merchant(name="Test Merchant 2")
+    db.add(m); db.commit(); db.refresh(m)
+    sub = MerchantWebhookSubscription(merchant_id=m.id, url="https://example.com/hook",
+                                       secret="s", event_types=["case.escalated"])
+    db.add(sub); db.commit(); db.refresh(sub)
+
+    called = {"n": 0}
+    def fake_urlopen(req, timeout=5):
+        called["n"] += 1
+        raise AssertionError("should not be called")
+    monkeypatch.setattr(outbound_webhooks.urllib.request, "urlopen", fake_urlopen)
+
+    outbound_webhooks.dispatch_event(db, m.id, "case.recovered", "CASE-2", {})
+    assert called["n"] == 0
+    assert db.query(WebhookDelivery).count() == 0
+
+
+def test_dispatch_event_never_raises_on_delivery_failure(db, monkeypatch):
+    """An unreachable merchant endpoint must never propagate an exception
+    into the recovery workflow — it's logged as a failed delivery instead."""
+    from app import outbound_webhooks
+    from app.models import Merchant, MerchantWebhookSubscription, WebhookDelivery
+
+    m = Merchant(name="Test Merchant 3")
+    db.add(m); db.commit(); db.refresh(m)
+    sub = MerchantWebhookSubscription(merchant_id=m.id, url="https://unreachable.example.com/hook",
+                                       secret="s", event_types=["case.opened"])
+    db.add(sub); db.commit(); db.refresh(sub)
+
+    def fake_urlopen(req, timeout=5):
+        raise ConnectionRefusedError("nope")
+    monkeypatch.setattr(outbound_webhooks.urllib.request, "urlopen", fake_urlopen)
+
+    outbound_webhooks.dispatch_event(db, m.id, "case.opened", "CASE-3", {})  # must not raise
+
+    delivery = db.query(WebhookDelivery).filter(WebhookDelivery.subscription_id == sub.id).first()
+    assert delivery.success is False
+    assert "ConnectionRefusedError" in delivery.error
+
+
+def test_case_creation_dispatches_opened_webhook_for_merchant_customer(db, monkeypatch):
+    """create_case fires a case.opened webhook when the customer belongs to
+    a merchant with an active subscription — end-to-end through the
+    orchestrator, not just the dispatch function in isolation."""
+    from app.models import Merchant
+    from app import outbound_webhooks
+
+    m = Merchant(name="Webhook Merchant")
+    db.add(m); db.commit(); db.refresh(m)
+    from app.models import MerchantWebhookSubscription
+    sub = MerchantWebhookSubscription(merchant_id=m.id, url="https://example.com/hook",
+                                       secret="s", event_types=["case.opened"])
+    db.add(sub); db.commit()
+
+    calls = []
+    def fake_dispatch(db_, merchant_id, event_type, case_id, data):
+        calls.append((merchant_id, event_type))
+    monkeypatch.setattr("app.agents.orchestrator.dispatch_event", fake_dispatch)
+
+    c = make_customer(db, merchant_id=m.id)
+    create_case(db, c, "payment_failed", "PAY-wh", 1000)
+
+    assert (m.id, "case.opened") in calls
+
+
+# ---------------------------------------------------------------- Merchant webhook API tests
+def test_webhook_subscription_crud_via_api(db):
+    from fastapi import HTTPException
+    from app.main import create_merchant_webhook, list_merchant_webhooks, delete_merchant_webhook
+    from app.models import Merchant
+
+    m = Merchant(name="API Test Merchant")
+    db.add(m); db.commit(); db.refresh(m)
+
+    created = create_merchant_webhook(m.id, {"url": "https://example.com/hook"}, db=db)
+    assert "secret" in created and len(created["secret"]) > 20
+    webhook_id = created["id"]
+
+    listed = list_merchant_webhooks(m.id, db=db)
+    assert len(listed) == 1
+    assert "secret" not in listed[0]  # never returned again after creation
+
+    delete_merchant_webhook(m.id, webhook_id, db=db)
+    assert list_merchant_webhooks(m.id, db=db) == []
+
+    with pytest.raises(HTTPException):
+        delete_merchant_webhook(m.id, webhook_id, db=db)  # already deleted
+
+
+def test_webhook_subscription_rejects_invalid_url(db):
+    from fastapi import HTTPException
+    from app.main import create_merchant_webhook
+    from app.models import Merchant
+
+    m = Merchant(name="API Test Merchant 2")
+    db.add(m); db.commit(); db.refresh(m)
+
+    with pytest.raises(HTTPException) as exc_info:
+        create_merchant_webhook(m.id, {"url": "not-a-url"}, db=db)
+    assert exc_info.value.status_code == 400

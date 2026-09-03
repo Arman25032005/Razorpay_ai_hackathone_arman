@@ -13,11 +13,13 @@ Accepts two shapes for payment events:
     "payload": {"payment": {"entity": {"id": "pay_...", "amount": 500,
       (paise) "currency": "INR", "status": "failed", "email": "...",
       "contact": "...", "customer_id": "...", "error_code": "...",
-      "error_description": "...", "created_at": 1568781321}}},
+      "error_reason": "...", "error_description": "...",
+      "created_at": 1568781321}}},
     "created_at": 1568781323}
    `_normalize_razorpay_payload()` converts this into our internal shape
-   before processing, including converting paise -> rupees and mapping
-   Razorpay error codes to our root-cause categories.
+   before processing, including converting paise -> rupees and classifying
+   Razorpay's real documented `error_reason` taxonomy (see
+   app.decline_codes) into our internal root-cause categories.
 
 Idempotency: every inbound event carries a provider `event_id` (or, for raw
 Razorpay payloads with no top-level event_id, we derive one from the
@@ -32,6 +34,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Customer, Payment, Invoice, WebhookEvent, utcnow
 from app.agents.orchestrator import create_case
+from app.decline_codes import classify_decline
 
 INTERNAL_EVENT_TYPES = {
     "payment.failed": "PAYMENT_FAILED",
@@ -41,23 +44,6 @@ INTERNAL_EVENT_TYPES = {
     "subscription.failed": "SUBSCRIPTION_FAILED",
     "invoice.overdue": "INVOICE_OVERDUE",
 }
-
-# Razorpay error_code -> our internal root-cause failure_reason vocabulary.
-# See https://razorpay.com/docs/payments/payments/failures/ for the full list.
-RAZORPAY_ERROR_CODE_MAP = {
-    "BAD_REQUEST_ERROR": "unrecognized_gateway_error",
-    "GATEWAY_ERROR": "network_timeout",
-    "SERVER_ERROR": "network_timeout",
-}
-RAZORPAY_ERROR_DESCRIPTION_KEYWORDS = [
-    # (substring to look for in error_description, our internal failure_reason)
-    ("insufficient", "insufficient_funds"),
-    ("expired", "card_expired"),
-    ("authentication", "auth_failed"),
-    ("declined", "bank_declined"),
-    ("invalid", "invalid_method"),
-    ("timeout", "network_timeout"),
-]
 
 
 def _normalize_razorpay_payload(payload: dict) -> dict:
@@ -71,19 +57,15 @@ def _normalize_razorpay_payload(payload: dict) -> dict:
     payment_entity = (
         payload.get("payload", {}).get("payment", {}).get("entity", {})
     )
-    error_description = (payment_entity.get("error_description") or "").lower()
-    # Check the specific description text FIRST — Razorpay's error_code is a
-    # coarse top-level class (e.g. BAD_REQUEST_ERROR covers many distinct
-    # underlying reasons including card expiry, invalid CVV, etc.), so the
-    # human-readable description is the more reliable signal when present.
-    failure_reason = None
-    for keyword, reason in RAZORPAY_ERROR_DESCRIPTION_KEYWORDS:
-        if keyword in error_description:
-            failure_reason = reason
-            break
-    if not failure_reason:
-        failure_reason = RAZORPAY_ERROR_CODE_MAP.get(payment_entity.get("error_code"))
-    failure_reason = failure_reason or "unrecognized_gateway_error"
+    # Classified from Razorpay's real documented error taxonomy (see
+    # app.decline_codes) — the authoritative `error_reason` field is tried
+    # first, falling back to error_code / error_description when a payload
+    # doesn't carry it (e.g. older integrations, or our own simplified shape).
+    failure_reason = classify_decline(
+        reason=payment_entity.get("error_reason"),
+        error_code=payment_entity.get("error_code"),
+        description=payment_entity.get("error_description"),
+    )
 
     amount_paise = payment_entity.get("amount", 0)
     event_id = f"razorpay:{payment_entity.get('id', 'unknown')}:{event_type}"
