@@ -15,6 +15,20 @@ audit.
 [![CI](https://github.com/Arman25032005/Razorpay_ai_hackathone_arman/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey.svg)](LICENSE)
 
+### Why I built this
+
+Every merchant dashboard I looked at treats a failed payment as a status
+flag, not a case to work. It reports "failed" and stops — it doesn't ask
+*why*, doesn't decide whether trying again is even worth it, and doesn't
+know when to give up and ask a human. That gap between "detected" and
+"resolved" is where revenue quietly leaks, and it's manual, repetitive
+work that a bounded decision loop is well-suited to, provided the loop is
+honest about what it doesn't know and can't override the rules a human
+set. That's the actual scope of this project: not "AI that handles
+payments," but a deterministic recovery workflow with AI doing the one
+part — diagnosis — that genuinely benefits from pattern-matching across
+messy, category-heavy failure reasons.
+
 ## Table of contents
 
 - [1. Problem](#1-problem)
@@ -196,6 +210,34 @@ methodology and [ADR-006](docs/ARCHITECTURE_DECISIONS.md#adr-006--simulation-vs-
 for how simulated data is kept structurally separate from anything a
 live integration would touch.
 
+### Where AI is used
+
+The dividing line, stated once in one place rather than scattered:
+
+**AI (rule engine, or a real LLM if `LLM_API_KEY` is set):**
+- Diagnosing the likely root cause from a failure reason and customer
+  context
+- Producing a confidence score and plain-language reasoning summary
+- Recommending a strategy from a closed vocabulary (never a freeform one)
+
+**Deterministic (plain Python, no model involved):**
+- Whether an action is actually authorized to run (`app/policies/engine.py`)
+- Retry limits, workflow age limits, channel restrictions
+- Payment status verification immediately before acting
+- Webhook signature verification and event deduplication
+- Executing the action against a provider (real Razorpay/SendGrid/Twilio,
+  or the mock equivalents)
+- Audit logging of every step
+
+The trained ML model sits in its own third category — not a rule, not an
+LLM call — predicting one number (recovery probability) that feeds the
+advisory expected-value calculation but never authorizes anything itself.
+See ADR-001, ADR-002, and ADR-005 in
+[`docs/ARCHITECTURE_DECISIONS.md`](docs/ARCHITECTURE_DECISIONS.md) for why
+this boundary is enforced structurally, not just by convention — `check_policy()`
+doesn't import the diagnosis module or the expected-value module, and that's
+asserted by a test, not just documented.
+
 ## 8. Payment safety
 
 - Webhook signatures verified with HMAC-SHA256, constant-time comparison
@@ -256,7 +298,8 @@ updates analytics. Full breakdown: [`docs/TESTING.md`](docs/TESTING.md).
 
 ## 11. Limitations
 
-Stated plainly, in priority order:
+Stated plainly, in priority order (full accounting, including a couple of
+narrower ones not repeated here, in [`docs/known-limitations.md`](docs/known-limitations.md)):
 
 1. **No RBAC.** Auth is one shared credential (`API_KEY` or
    `DASHBOARD_PASSWORD`) per deployment, not per-user identity — a
@@ -346,6 +389,9 @@ Full checklist: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 |---|---|
 | [`docs/PRODUCT_DECISIONS.md`](docs/PRODUCT_DECISIONS.md) | What the product does and why, in plain language |
 | [`docs/ARCHITECTURE_DECISIONS.md`](docs/ARCHITECTURE_DECISIONS.md) | ADRs — why each major architectural choice was made, trade-offs included |
+| [`docs/decisions.md`](docs/decisions.md) | The above, as a short decision log — thirty seconds per decision |
+| [`docs/development-notes.md`](docs/development-notes.md) | Real bugs and changes from git history that shaped the design |
+| [`docs/known-limitations.md`](docs/known-limitations.md) | Every honest gap, in one place |
 | [`docs/DESIGN_WALKTHROUGH.md`](docs/DESIGN_WALKTHROUGH.md) | Component-by-component explanation + judge Q&A |
 | [`docs/PRODUCT.md`](docs/PRODUCT.md) | Built-vs-roadmap breakdown |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Stack, request flow, agent loop |

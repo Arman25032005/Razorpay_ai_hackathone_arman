@@ -145,6 +145,30 @@ def test_failed_payment_does_not_count_as_recovery(db, monkeypatch):
     assert case.amount_recovered == 0
 
 
+def test_execute_next_action_is_a_noop_once_case_is_recovered(db, monkeypatch):
+    """A recovered case must never be actioned again. execute_next_action's
+    guard clause returns early for any terminal status (RECOVERED, STOPPED,
+    EXPIRED, ESCALATED) before creating a RecoveryAction row — this is what
+    stops a retried webhook, a double-clicked dashboard button, or a retried
+    scheduler tick from firing a second real payment retry or a second
+    customer message against a case that's already closed."""
+    from app.providers import payment as payment_mod
+    monkeypatch.setattr(payment_mod.payment_provider, "retry_payment",
+                         lambda *a, **kw: {"status": "succeeded", "provider": "mock"})
+    c = make_customer(db)
+    case = create_case(db, c, "payment_failed", "PAY-1", 5000)
+    analyze_case(db, case, failure_reason="temporary_failure")
+    execute_next_action(db, case)
+    assert case.status == "RECOVERED"
+    actions_after_first_call = db.query(RecoveryAction).filter(RecoveryAction.case_id == case.id).count()
+
+    execute_next_action(db, case)  # called again, as a duplicate webhook/click would
+
+    assert case.status == "RECOVERED"
+    assert case.amount_recovered == 5000  # not doubled
+    assert db.query(RecoveryAction).filter(RecoveryAction.case_id == case.id).count() == actions_after_first_call
+
+
 def test_max_attempts_produces_escalation(db, monkeypatch):
     from app.providers import payment as payment_mod
     monkeypatch.setattr(payment_mod.payment_provider, "retry_payment",
